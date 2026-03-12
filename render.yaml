@@ -10,8 +10,8 @@ services:
     buildCommand: |
       export PIP_NO_BINARY=none &&
       export PIP_ONLY_BINARY=:all: &&
-      pip install --no-cache-dir --upgrade pip &&
-      pip install --no-cache-dir --only-binary :all: -r requirements-render.txt &&
+      pip install --upgrade pip &&
+      pip install --only-binary :all: -r requirements-render.txt &&
       cd ../frontend &&
       npm install &&
       CI=false npm run build &&

@@ -1,4 +1,4 @@
-# Render-specific requirements with exact compatible versions
+# Core dependencies
 fastapi==0.109.0
 uvicorn==0.27.0
 click==8.1.7
