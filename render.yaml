@@ -6,25 +6,31 @@ services:
     plan: starter
     runtime:
       runtime: python311
-    rootDir: backend
+    rootDir: .
     buildCommand: |
-      echo "=== Starting Build ===" &&
-      export PIP_ONLY_BINARY=:all: &&
-      echo "Installing Python dependencies..." &&
-      pip install --upgrade pip &&
-      pip install --only-binary :all: -r requirements-render.txt &&
-      echo "Installing frontend dependencies..." &&
-      cd ../frontend &&
-      npm install &&
-      echo "Building frontend..." &&
-      CI=false npm run build &&
-      echo "Copying build to backend..." &&
-      ls -la &&
-      cp -rv build ../backend/ &&
-      echo "Build complete!" &&
-      cd ../backend &&
-      ls -la
-    startCommand: python start.py
+      set -e
+      echo "=== BUILD STARTED ==="
+      echo "Current directory: $(pwd)"
+      echo "Installing Python dependencies..."
+      cd backend
+      pip install --upgrade pip
+      pip install --only-binary :all: -r requirements-render.txt
+      echo "Python dependencies installed"
+      echo "Building frontend..."
+      cd ../frontend
+      npm install 2>&1 | tail -20
+      echo "NPM install complete"
+      CI=false npm run build 2>&1 | tail -30
+      echo "NPM build complete"
+      echo "Frontend build contents:"
+      ls -la build/
+      echo "Copying to backend..."
+      cp -rv build ../backend/
+      echo "Copy complete"
+      echo "Verifying copy..."
+      ls -la ../backend/build/
+      echo "=== BUILD COMPLETE ==="
+    startCommand: cd backend && python start.py
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:

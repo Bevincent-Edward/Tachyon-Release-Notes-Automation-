@@ -2,9 +2,6 @@
 Release Notes Processor - Full Application
 """
 import os
-import re
-import json
-from typing import Optional
 from pathlib import Path
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
@@ -36,28 +33,24 @@ else:
 OUTPUT_DIR = Path(__file__).parent / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-# Mount frontend - Check multiple locations
-frontend_build = None
+# Mount frontend - On Render, build is in backend/build
+frontend_build = Path(__file__).parent / "build"
 
-# Location 1: backend/build (Render production)
-if (Path(__file__).parent / "build").exists():
-    frontend_build = Path(__file__).parent / "build"
-    print(f"✓ Found frontend build at: {frontend_build}")
-# Location 2: ../frontend/build (local development)
-elif (Path(__file__).parent.parent / "frontend" / "build").exists():
-    frontend_build = Path(__file__).parent.parent / "frontend" / "build"
-    print(f"✓ Found frontend build at: {frontend_build}")
-else:
-    print("✗ Frontend build not found - API only mode")
-
-if frontend_build:
+if frontend_build.exists() and (frontend_build / "index.html").exists():
+    print(f"✓ Frontend found at: {frontend_build}")
+    print(f"  Files: {len(list(frontend_build.iterdir()))} files")
     app.mount("/static", StaticFiles(directory=str(frontend_build / "static")), name="static")
+else:
+    print(f"✗ Frontend NOT found at: {frontend_build}")
+    print(f"  Directory exists: {frontend_build.exists()}")
+    if frontend_build.exists():
+        print(f"  Contents: {list(frontend_build.iterdir())}")
 
 @app.get("/api/health")
 async def health():
     return {
         "status": "healthy",
-        "frontend": frontend_build is not None,
+        "frontend": frontend_build.exists() and (frontend_build / "index.html").exists(),
         "qubrid": qubrid_client is not None,
         "groq": groq_client is not None,
         "gemini": gemini_model is not None
@@ -79,8 +72,18 @@ async def serve_frontend(full_path: str):
     if full_path.startswith("api/"):
         return {"error": "API route not found"}
     
-    if not frontend_build:
-        return {"error": "Frontend not built - run 'npm run build' in frontend folder"}
+    if not frontend_build.exists():
+        return {
+            "error": "Frontend not built",
+            "details": "Run: cd frontend && npm install && npm run build",
+            "build_path": str(frontend_build)
+        }
+    
+    # Serve index.html for root
+    if not full_path or full_path == "/":
+        index_file = frontend_build / "index.html"
+        if index_file.exists():
+            return FileResponse(str(index_file))
     
     # Try to serve the requested file
     file_path = frontend_build / full_path
@@ -92,7 +95,7 @@ async def serve_frontend(full_path: str):
     if index_file.exists():
         return FileResponse(str(index_file))
     
-    return {"error": "File not found", "path": str(full_path)}
+    return {"error": "File not found", "path": full_path}
 
 if __name__ == "__main__":
     import uvicorn
