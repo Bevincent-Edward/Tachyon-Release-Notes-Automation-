@@ -36,19 +36,28 @@ else:
 OUTPUT_DIR = Path(__file__).parent / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-# Mount frontend - On Render, build is copied to backend folder
-frontend_build = Path(__file__).parent / "build"
-if not frontend_build.exists():
-    # Fallback for local development
-    frontend_build = Path(__file__).parent.parent / "frontend" / "build"
+# Mount frontend - Check multiple locations
+frontend_build = None
 
-if frontend_build.exists():
+# Location 1: backend/build (Render production)
+if (Path(__file__).parent / "build").exists():
+    frontend_build = Path(__file__).parent / "build"
+    print(f"✓ Found frontend build at: {frontend_build}")
+# Location 2: ../frontend/build (local development)
+elif (Path(__file__).parent.parent / "frontend" / "build").exists():
+    frontend_build = Path(__file__).parent.parent / "frontend" / "build"
+    print(f"✓ Found frontend build at: {frontend_build}")
+else:
+    print("✗ Frontend build not found - API only mode")
+
+if frontend_build:
     app.mount("/static", StaticFiles(directory=str(frontend_build / "static")), name="static")
 
 @app.get("/api/health")
 async def health():
     return {
         "status": "healthy",
+        "frontend": frontend_build is not None,
         "qubrid": qubrid_client is not None,
         "groq": groq_client is not None,
         "gemini": gemini_model is not None
@@ -63,7 +72,6 @@ async def list_files():
 
 @app.post("/api/process")
 async def process(file: UploadFile = File(...)):
-    # Your processing logic here
     return {"status": "processing", "filename": file.filename}
 
 @app.get("/{full_path:path}")
@@ -71,18 +79,20 @@ async def serve_frontend(full_path: str):
     if full_path.startswith("api/"):
         return {"error": "API route not found"}
     
-    # Try to serve from build directory
-    if frontend_build.exists():
-        # Try to serve the requested file
-        file_path = frontend_build / full_path
-        if file_path.exists() and file_path.is_file():
-            return FileResponse(str(file_path))
-        # Serve index.html for SPA routing
-        index_file = frontend_build / "index.html"
-        if index_file.exists():
-            return FileResponse(str(index_file))
+    if not frontend_build:
+        return {"error": "Frontend not built - run 'npm run build' in frontend folder"}
     
-    return {"error": "Frontend not found - build directory missing"}
+    # Try to serve the requested file
+    file_path = frontend_build / full_path
+    if file_path.exists() and file_path.is_file():
+        return FileResponse(str(file_path))
+    
+    # Serve index.html for SPA routing
+    index_file = frontend_build / "index.html"
+    if index_file.exists():
+        return FileResponse(str(index_file))
+    
+    return {"error": "File not found", "path": str(full_path)}
 
 if __name__ == "__main__":
     import uvicorn

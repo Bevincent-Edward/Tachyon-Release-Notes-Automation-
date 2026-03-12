@@ -8,14 +8,22 @@ services:
       runtime: python311
     rootDir: backend
     buildCommand: |
-      export PIP_NO_BINARY=none &&
+      echo "=== Starting Build ===" &&
       export PIP_ONLY_BINARY=:all: &&
+      echo "Installing Python dependencies..." &&
       pip install --upgrade pip &&
       pip install --only-binary :all: -r requirements-render.txt &&
+      echo "Installing frontend dependencies..." &&
       cd ../frontend &&
       npm install &&
+      echo "Building frontend..." &&
       CI=false npm run build &&
-      cp -r build .
+      echo "Copying build to backend..." &&
+      ls -la &&
+      cp -rv build ../backend/ &&
+      echo "Build complete!" &&
+      cd ../backend &&
+      ls -la
     startCommand: python start.py
     healthCheckPath: /api/health
     autoDeploy: true
