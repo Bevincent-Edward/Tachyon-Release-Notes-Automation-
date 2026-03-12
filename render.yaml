@@ -6,31 +6,16 @@ services:
     plan: starter
     runtime:
       runtime: python311
-    rootDir: .
     buildCommand: |
-      set -e
-      echo "=== BUILD STARTED ==="
-      echo "Current directory: $(pwd)"
-      echo "Installing Python dependencies..."
-      cd backend
-      pip install --upgrade pip
-      pip install --only-binary :all: -r requirements-render.txt
-      echo "Python dependencies installed"
-      echo "Building frontend..."
-      cd ../frontend
-      npm install 2>&1 | tail -20
-      echo "NPM install complete"
-      CI=false npm run build 2>&1 | tail -30
-      echo "NPM build complete"
-      echo "Frontend build contents:"
-      ls -la build/
-      echo "Copying to backend..."
-      cp -rv build ../backend/
-      echo "Copy complete"
-      echo "Verifying copy..."
-      ls -la ../backend/build/
-      echo "=== BUILD COMPLETE ==="
-    startCommand: cd backend && python start.py
+      echo "=== INSTALLING PYTHON ==="
+      pip install -r backend/requirements-render.txt
+      echo "=== BUILDING FRONTEND ==="
+      cd frontend
+      npm install
+      npm run build
+      echo "=== FRONTEND BUILT ==="
+      ls -la
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:
@@ -44,5 +29,3 @@ services:
         value: https://platform.qubrid.com/v1
       - key: QUBRID_MODEL
         value: openai/gpt-oss-20b
-      - key: PORT
-        value: "10000"
