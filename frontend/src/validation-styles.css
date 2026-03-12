@@ -1,0 +1,125 @@
+/* ============================================================================
+   VALIDATION & VISUALIZATION - RICH CARD STYLING
+   ============================================================================ */
+
+.heatmap-container {
+  overflow-x: auto;
+  padding: var(--lg);
+  background: var(--bg-card);
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(157, 78, 221, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.heatmap-cell {
+  padding: var(--md) var(--lg);
+  border-radius: var(--radius-md);
+  text-align: center;
+  font-weight: 800;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  min-width: 70px;
+  border: 1px solid rgba(157, 78, 221, 0.2);
+}
+
+.heatmap-cell:hover {
+  transform: scale(1.15);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 10;
+}
+
+.feature-distribution {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--lg);
+  margin: var(--lg) 0;
+}
+
+.distribution-card {
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  padding: var(--lg);
+  border: 1px solid rgba(157, 78, 221, 0.3);
+  text-align: center;
+  transition: all var(--transition);
+}
+
+.distribution-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--purple-light);
+  box-shadow: 0 12px 48px rgba(157, 78, 221, 0.5);
+}
+
+.distribution-value {
+  font-size: 2.5rem;
+  font-weight: 800;
+  background: linear-gradient(-45deg, #e81cff, #9d4edd, #40c9ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.violations-by-category {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: var(--lg);
+  margin: var(--lg) 0;
+}
+
+.violation-category-card {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(244, 47, 37, 0.1));
+  border: 2px solid rgba(239, 68, 68, 0.3);
+  border-radius: var(--radius-lg);
+  padding: var(--lg);
+  text-align: center;
+}
+
+.violation-category-value {
+  font-size: 3rem;
+  font-weight: 800;
+  color: #ff6b6b;
+  text-shadow: 0 0 20px rgba(239, 68, 68, 0.5);
+}
+
+.feature-compliance-breakdown {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--md);
+  margin: var(--lg) 0;
+}
+
+.compliance-progress-card {
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  padding: var(--md);
+  border: 1px solid rgba(157, 78, 221, 0.3);
+  transition: all var(--transition-fast);
+}
+
+.compliance-progress-card:hover {
+  border-color: var(--purple-light);
+  transform: translateX(4px);
+}
+
+.compliance-progress-bar {
+  height: 12px;
+  background: var(--bg-hover);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  border: 1px solid rgba(157, 78, 221, 0.3);
+}
+
+.compliance-progress-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: width var(--transition-slow);
+}
+
+.compliance-percentage {
+  text-align: right;
+  font-weight: 800;
+  font-size: 0.9rem;
+  margin-top: var(--xs);
+  color: var(--purple-light);
+}

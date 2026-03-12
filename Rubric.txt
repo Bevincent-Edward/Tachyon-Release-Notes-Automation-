@@ -1,0 +1,103 @@
+Agent must analyze the input release notes that will be a word document from Engineering/Product team that will be a rough draft. You must refine the input file and publish a perfect functional release notes in external site. You must refine the release notes, create md files for each features in VS Code and commit the changes. Once jenkins build is run, the changes will be published in prod. The document can be refined using the following rules:
+
+Step 1: Feature Filtering
+ Analyze the input document.
+ The first field in a row is a feature. Filter the features alone.
+ Retain only features where the field "To be published externally" = "Yes".
+ Discard all other features.
+ Retain only the filtered externally publishable features.
+ Do not include the source links in the output generated.
+ Step 2: Content Writing Guidelines
+ For each retained feature:
+ Follow MSTP (Microsoft style guide) best practices.
+ Use simple present tense.
+Must be in active voice.
+ Use clear customer-facing language.
+ Do not include internal references
+ Acronym Formatting Rules
+ Bold all acronyms.
+ Bold acronyms in plural form.
+ Bold acronyms in headings.
+ Bold acronyms prefixed or suffixed with hyphen.
+ Example: API, APIs, API-based, Pre-API
+
+ Step 3: Structure for Each Feature
+ Generate content in the following order:
+ 1. Title
+ Provide a crisp title explaining the functionality. Title must start with Noun, can start with enhancements in. Example: 
+Biometric Authentication for UPI Transactions, Bulk Update of User-Defined Tags, Credit Balance Refund in Operations Center, Multiple ABU Configurations for an Issuer
+ Use Title Case.
+ Keep it short and outcome-focused.
+ 2. Description
+ Provide one to two lines in past tense. Like this functionality is done.
+ Clearly state what is introduced or changed.
+ 3. Problem Statement
+ Describe the current problem in present tense.
+ Clearly state what is missing or inefficient today.
+ Base it strictly on the provided problem statement.
+ Do not use the period related words. Example: existing, current, now.
+ 4. Enhancement
+ Explain the new changes.
+For one or two enhancements, write as paragraphs. Directly start with actual enhancement. 
+For multiple enhancements (more than two) to be listed: The lead line can be:
+
+With this enhancement, 
+Through this enhancement,
+The enhancement introduces the following:
+
+ List them as bullet points. For bullet points, do not add full stop at the end of the statement.
+
+ 5. Impact
+ Describe the outcome or benefit.
+
+Standard format:
+If one or two impact exists, Write it as a short paragraph. For paragraphs directly start with actual impact.
+For multiple enhancements (more than two) to be listed:
+The impact of the enhancement is detailed below:
+* Allows users to
+* Enables agents to
+* Increases the efficiency
+ List them as bullet points. For bullet points, do not add full stop at the end of the statement.
+ Step 4: Formatting Rules
+ Only complete sentences end with a period.
+ Do not add periods to:
+ Headings
+ Single words
+ Phrases
+ Bullet fragments
+ Step 5: Additional Sections
+ Include the following only if values are explicitly provided in the input:
+ User interface changes
+ Include only if applicable.
+ If the value is "None", "NA", "No", "-", or blank → remove this section entirely.
+ If present, only mention the below.
+ Operations Center
+ Support Center
+ Agent Center
+ Or the exact center specified
+ Or workbenches specified
+ Reports and extracts
+ Include only if a value is present.
+ Audit logs
+ If value = Yes/Y/Enabled → write Enabled
+ If value ≠ Yes/Y/Enabled → write Disabled
+ Known issues and callouts
+ Include only if a value is present.
+
+ Step 6: Geography Segregation
+ Group the features into two geography buckets:
+ All:
+ Include features marked as "All", "India", "US"
+ India
+ Include features marked as "India" and "All"
+ US
+ Include features marked as "US" and "All"
+ Step 7: Markdown Output
+ Create a md file for all the features that are externally publishable, i will attach the sample format.
+ Analyze the provided sample markdown file.
+ Follow the same structure and formatting.
+ Generate a similar markdown file for the filtered features.
+ Name of each md file must be in lower case and words separated by hypen. Example: create-the-loan
+ In the md file, heading must be in H1 (Title case), rest must be in H2 sentence case 
+ Ensure consistency in headings, spacing, and bullet structure.
+Strictly follow Microsoft style guide best practices.

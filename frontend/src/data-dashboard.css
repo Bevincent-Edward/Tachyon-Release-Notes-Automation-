@@ -1,0 +1,406 @@
+/* ============================================================================
+   DATA DASHBOARD - CLEAN, CRISP, MODERN VISUALIZATION
+   ============================================================================ */
+
+/* Dashboard Container */
+.data-dashboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: var(--lg);
+  margin: var(--lg) 0;
+}
+
+/* Dashboard Card */
+.dashboard-card {
+  background: var(--bg-card);
+  border-radius: var(--radius-xl);
+  padding: var(--xl);
+  border: 1px solid rgba(157, 78, 221, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  transition: all var(--transition);
+}
+
+.dashboard-card:hover {
+  border-color: var(--purple-light);
+  box-shadow: 0 12px 48px rgba(157, 78, 221, 0.5);
+  transform: translateY(-4px);
+}
+
+.dashboard-card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--md);
+  margin-bottom: var(--lg);
+  padding-bottom: var(--md);
+  border-bottom: 1px solid rgba(157, 78, 221, 0.3);
+}
+
+.dashboard-card-icon {
+  width: 48px;
+  height: 48px;
+  background: linear-gradient(135deg, #e81cff, #9d4edd);
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-white);
+  box-shadow: 0 4px 16px rgba(157, 78, 221, 0.4);
+}
+
+.dashboard-card-icon svg {
+  width: 28px;
+  height: 28px;
+}
+
+.dashboard-card-title {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text-white);
+  margin: 0;
+}
+
+/* Score Ring */
+.score-ring-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--lg);
+}
+
+.score-ring {
+  position: relative;
+  width: 160px;
+  height: 160px;
+  margin-bottom: var(--md);
+}
+
+.score-ring-svg {
+  transform: rotate(-90deg);
+  width: 100%;
+  height: 100%;
+}
+
+.score-ring-bg {
+  fill: none;
+  stroke: var(--bg-hover);
+  stroke-width: 12;
+}
+
+.score-ring-fill {
+  fill: none;
+  stroke: url(#scoreGradient);
+  stroke-width: 12;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 1s ease;
+}
+
+.score-ring-value {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 2.5rem;
+  font-weight: 800;
+  background: linear-gradient(-45deg, #e81cff, #9d4edd, #40c9ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.score-ring-label {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Category Score Bar */
+.category-score-item {
+  display: flex;
+  align-items: center;
+  gap: var(--md);
+  margin-bottom: var(--md);
+  padding: var(--sm);
+  background: var(--bg-hover);
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+}
+
+.category-score-item:hover {
+  background: var(--bg-card-light);
+  transform: translateX(4px);
+}
+
+.category-score-name {
+  width: 120px;
+  font-weight: 700;
+  color: var(--text-white);
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.category-score-bar {
+  flex: 1;
+  height: 12px;
+  background: var(--bg-card-light);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  border: 1px solid rgba(157, 78, 221, 0.3);
+}
+
+.category-score-fill {
+  height: 100%;
+  background: linear-gradient(-45deg, #e81cff, #9d4edd, #40c9ff);
+  border-radius: var(--radius-full);
+  transition: width 1s ease;
+  position: relative;
+}
+
+.category-score-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+  animation: shimmer 2s infinite;
+}
+
+.category-score-value {
+  width: 50px;
+  text-align: right;
+  font-weight: 800;
+  color: var(--purple-light);
+  font-size: 0.95rem;
+}
+
+/* Geography Cards */
+.geography-dashboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--lg);
+  margin: var(--lg) 0;
+}
+
+.geo-dashboard-card {
+  background: linear-gradient(135deg, rgba(26, 10, 46, 0.9), rgba(45, 31, 61, 0.9));
+  border-radius: var(--radius-xl);
+  padding: var(--xl);
+  border: 2px solid rgba(157, 78, 221, 0.4);
+  text-align: center;
+  transition: all var(--transition);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.geo-dashboard-card:hover {
+  border-color: var(--purple-light);
+  transform: translateY(-8px);
+  box-shadow: 0 16px 48px rgba(157, 78, 221, 0.6);
+}
+
+.geo-dashboard-flag {
+  font-size: 4rem;
+  margin-bottom: var(--md);
+  filter: drop-shadow(0 0 20px rgba(157, 78, 221, 0.5));
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.geo-dashboard-name {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text-white);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: var(--sm);
+}
+
+.geo-dashboard-count {
+  font-size: 3rem;
+  font-weight: 800;
+  background: linear-gradient(-45deg, #e81cff, #9d4edd, #40c9ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: var(--xs);
+}
+
+.geo-dashboard-label {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.geo-dashboard-bar {
+  height: 8px;
+  background: var(--bg-hover);
+  border-radius: var(--radius-full);
+  margin-top: var(--md);
+  overflow: hidden;
+  border: 1px solid rgba(157, 78, 221, 0.3);
+}
+
+.geo-dashboard-bar-fill {
+  height: 100%;
+  background: linear-gradient(-45deg, #e81cff, #9d4edd, #40c9ff);
+  border-radius: var(--radius-full);
+  transition: width 1s ease;
+}
+
+/* Violations Summary */
+.violations-dashboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--lg);
+  margin: var(--lg) 0;
+}
+
+.violation-type-card {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(244, 47, 37, 0.1));
+  border: 2px solid rgba(239, 68, 68, 0.4);
+  border-radius: var(--radius-xl);
+  padding: var(--xl);
+  text-align: center;
+  transition: all var(--transition);
+}
+
+.violation-type-card:hover {
+  border-color: rgba(239, 68, 68, 0.7);
+  transform: scale(1.05);
+  box-shadow: 0 12px 48px rgba(239, 68, 68, 0.4);
+}
+
+.violation-type-icon {
+  font-size: 3rem;
+  margin-bottom: var(--md);
+}
+
+.violation-type-count {
+  font-size: 3rem;
+  font-weight: 800;
+  color: #ff6b6b;
+  text-shadow: 0 0 20px rgba(239, 68, 68, 0.5);
+  margin-bottom: var(--xs);
+}
+
+.violation-type-label {
+  font-size: 0.9rem;
+  color: var(--text-light);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Before/After Comparison - Clean */
+.before-after-comparison {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--lg);
+  margin: var(--lg) 0;
+}
+
+.comparison-card {
+  background: var(--bg-card);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  border: 2px solid rgba(157, 78, 221, 0.3);
+  transition: all var(--transition);
+}
+
+.comparison-card:hover {
+  box-shadow: 0 12px 48px rgba(157, 78, 221, 0.5);
+}
+
+.comparison-card.before {
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
+.comparison-card.after {
+  border-color: rgba(16, 185, 129, 0.5);
+}
+
+.comparison-header {
+  padding: var(--lg);
+  text-align: center;
+  border-bottom: 1px solid rgba(157, 78, 221, 0.3);
+}
+
+.comparison-header.before {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(244, 47, 37, 0.1));
+}
+
+.comparison-header.after {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(0, 206, 201, 0.1));
+}
+
+.comparison-title {
+  font-size: 1.1rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.comparison-title.before {
+  color: #ef4444;
+}
+
+.comparison-title.after {
+  color: #10b981;
+}
+
+.comparison-content {
+  padding: var(--lg);
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.comparison-text {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.85rem;
+  line-height: 1.8;
+  color: var(--text-light);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.comparison-text strong {
+  color: var(--text-white);
+  font-weight: 800;
+}
+
+.comparison-text .highlight-change {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(0, 206, 201, 0.2));
+  padding: var(--xs) var(--sm);
+  border-radius: var(--radius-sm);
+  color: #10b981;
+  font-weight: 700;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .data-dashboard {
+    grid-template-columns: 1fr;
+  }
+  
+  .before-after-comparison {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .geography-dashboard {
+    grid-template-columns: 1fr;
+  }
+  
+  .violations-dashboard {
+    grid-template-columns: 1fr;
+  }
+}
