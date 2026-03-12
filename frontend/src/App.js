@@ -466,42 +466,8 @@ function App() {
   // BeforeAfterComparison - Replaced with BeforeAfterDashboard
   // const BeforeAfterComparison = ({ data }) => {...}
 
-  const BeforeAfterDashboard = ({ data }) => {
-    if (!data || !data.comparisons) return null;
-    
-    return (
-      <div className="before-after-viz">
-        <div className="ba-summary">
-          <div className="ba-stat">
-            <span className="ba-stat-value">{data.summary?.titles_changed || 0}</span>
-            <span className="ba-stat-label">Titles Refined</span>
-          </div>
-          <div className="ba-stat">
-            <span className="ba-stat-value">{data.summary?.avg_problem_length_change || 0}</span>
-            <span className="ba-stat-label">Avg Problem Length Change</span>
-          </div>
-        </div>
-        <div className="ba-comparisons">
-          {data.comparisons.slice(0, 5).map((comp, i) => (
-            <div key={i} className="ba-item">
-              <div className="ba-feature">{comp.feature}</div>
-              <div className="ba-comparison">
-                <div className="ba-before">
-                  <span className="ba-label">Before</span>
-                  <span className="ba-text">{comp.before.title.substring(0, 40)}...</span>
-                </div>
-                <div className="ba-arrow">→</div>
-                <div className="ba-after">
-                  <span className="ba-label">After</span>
-                  <span className="ba-text">{comp.after.title.substring(0, 40)}...</span>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
+  // DUPLICATE REMOVED - Using the one at line 381
+  // const BeforeAfterDashboard = ({ data }) => {...}
 
   // RadarChart - Replaced with cleaner dashboard components
   // const RadarChart = ({ data }) => {...}
