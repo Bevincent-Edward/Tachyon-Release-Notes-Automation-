@@ -36,8 +36,12 @@ else:
 OUTPUT_DIR = Path(__file__).parent / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-# Mount frontend
-frontend_build = Path(__file__).parent.parent / "frontend" / "build"
+# Mount frontend - On Render, build is copied to backend folder
+frontend_build = Path(__file__).parent / "build"
+if not frontend_build.exists():
+    # Fallback for local development
+    frontend_build = Path(__file__).parent.parent / "frontend" / "build"
+
 if frontend_build.exists():
     app.mount("/static", StaticFiles(directory=str(frontend_build / "static")), name="static")
 
@@ -66,10 +70,19 @@ async def process(file: UploadFile = File(...)):
 async def serve_frontend(full_path: str):
     if full_path.startswith("api/"):
         return {"error": "API route not found"}
-    index_file = frontend_build / "index.html"
-    if index_file.exists():
-        return FileResponse(str(index_file))
-    return {"error": "Frontend not found"}
+    
+    # Try to serve from build directory
+    if frontend_build.exists():
+        # Try to serve the requested file
+        file_path = frontend_build / full_path
+        if file_path.exists() and file_path.is_file():
+            return FileResponse(str(file_path))
+        # Serve index.html for SPA routing
+        index_file = frontend_build / "index.html"
+        if index_file.exists():
+            return FileResponse(str(index_file))
+    
+    return {"error": "Frontend not found - build directory missing"}
 
 if __name__ == "__main__":
     import uvicorn
