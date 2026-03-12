@@ -110,6 +110,9 @@ function App() {
     }
   };
 
+  // Used in upload card
+  // const handleFileSelect = (e) => {...}
+
   const handleUpload = async () => {
     if (!file) return;
 
@@ -207,6 +210,9 @@ function App() {
   const toggleValidation = () => {
     setShowValidation(!showValidation);
   };
+
+  // toggleValidation used for future feature
+  // const toggleValidation = () => {...}
 
   // Visualization Components - CLEAN DASHBOARD STYLE
   const ComplianceDashboard = ({ data }) => {
@@ -457,7 +463,10 @@ function App() {
     );
   };
 
-  const BeforeAfterComparison = ({ data }) => {
+  // BeforeAfterComparison - Replaced with BeforeAfterDashboard
+  // const BeforeAfterComparison = ({ data }) => {...}
+
+  const BeforeAfterDashboard = ({ data }) => {
     if (!data || !data.comparisons) return null;
     
     return (
@@ -494,7 +503,10 @@ function App() {
     );
   };
 
-  const RadarChart = ({ data }) => {
+  // RadarChart - Replaced with cleaner dashboard components
+  // const RadarChart = ({ data }) => {...}
+
+  const FeaturePie = ({ data }) => {
     if (!data || !data.categories) return null;
     
     const maxScore = data.max_score || 100;
