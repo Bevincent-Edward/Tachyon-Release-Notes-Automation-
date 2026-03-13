@@ -7,15 +7,16 @@ services:
     runtime:
       runtime: python311
     buildCommand: |
-      echo "=== INSTALLING PYTHON ==="
-      pip install -r backend/requirements-render.txt
-      echo "=== BUILDING FRONTEND ==="
-      cd frontend
-      npm install
-      npm run build
-      echo "=== FRONTEND BUILT ==="
-      ls -la
-    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+      echo "=== INSTALLING PYTHON ===" &&
+      python3 -m pip install --upgrade pip &&
+      python3 -m pip install --only-binary :all: -r backend/requirements-render.txt &&
+      echo "=== BUILDING FRONTEND ===" &&
+      cd frontend &&
+      npm install &&
+      CI=false npm run build &&
+      echo "=== FRONTEND BUILT ===" &&
+      ls -la build/
+    startCommand: python3 -m uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:
