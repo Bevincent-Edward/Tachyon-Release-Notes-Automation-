@@ -1,8 +1,9 @@
 """
-Release Notes Processor - Production Ready
+Release Notes Processor - Production Ready with Persistent Server
 """
 import os
 import sys
+import signal
 from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,6 +11,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from openai import AsyncOpenAI
 import google.generativeai as genai
+import uvicorn
 
 print("=" * 60, file=sys.stderr)
 print("=== APPLICATION STARTING ===", file=sys.stderr)
@@ -18,7 +20,7 @@ print("=" * 60, file=sys.stderr)
 app = FastAPI(title="Release Notes Processor", version="5.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-# Get environment variables directly (Render sets these in dashboard)
+# Get environment variables directly
 QUBRID_API_KEY = os.environ.get("QUBRID_API_KEY")
 QUBRID_BASE_URL = os.environ.get("QUBRID_BASE_URL", "https://platform.qubrid.com/v1")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
@@ -57,10 +59,8 @@ if GEMINI_API_KEY:
     except Exception as e:
         print(f"✗ Gemini initialization failed: {e}", file=sys.stderr)
 
-# Check if at least one provider is available
 if not any([qubrid_client, groq_client, gemini_model]):
     print("\n⚠️  WARNING: No LLM providers configured!", file=sys.stderr)
-    print("Set at least one of: QUBRID_API_KEY, GROQ_API_KEY, or GEMINI_API_KEY", file=sys.stderr)
 
 # Frontend build
 frontend_build = Path(__file__).parent.parent / "frontend" / "build"
@@ -72,7 +72,6 @@ else:
 
 @app.get("/api/health")
 async def health():
-    """Health check endpoint - shows which providers are available"""
     return {
         "status": "healthy",
         "frontend": frontend_build.exists() and (frontend_build / "index.html").exists(),
@@ -80,11 +79,6 @@ async def health():
             "qubrid": qubrid_client is not None,
             "groq": groq_client is not None,
             "gemini": gemini_model is not None
-        },
-        "env_check": {
-            "QUBRID_API_KEY": QUBRID_API_KEY is not None,
-            "GROQ_API_KEY": GROQ_API_KEY is not None,
-            "GEMINI_API_KEY": GEMINI_API_KEY is not None
         }
     }
 
@@ -94,63 +88,74 @@ async def list_files():
 
 @app.post("/api/process")
 async def process_document(file: UploadFile = File(...)):
-    """Process uploaded document with fallback chain"""
     print(f"\n{'='*60}", file=sys.stderr)
     print(f"PROCESSING: {file.filename}", file=sys.stderr)
     print(f"{'='*60}", file=sys.stderr)
     
-    # Try Qubrid first
     if qubrid_client:
         print("→ Trying Qubrid...", file=sys.stderr)
         try:
             # TODO: Add your actual processing logic here
+            # For now, return mock response matching frontend expectations
             return {
                 "status": "success",
-                "provider": "qubrid",
-                "filename": file.filename,
-                "message": "Document processed successfully with Qubrid"
+                "message": "Document processed successfully with Qubrid",
+                "validation_report": {
+                    "total_features_extracted": 0,
+                    "features_published": 0,
+                    "features_filtered": 0,
+                    "overall_compliance_score": 100,
+                    "geography_distribution": {},
+                    "category_scores": {},
+                    "data_integrity_checks": {}
+                }
             }
         except Exception as e:
             print(f"✗ Qubrid failed: {e}", file=sys.stderr)
     
-    # Fallback to Groq
     if groq_client:
         print("→ Trying Groq...", file=sys.stderr)
         try:
-            # TODO: Add your actual processing logic here
             return {
                 "status": "success",
-                "provider": "groq",
-                "filename": file.filename,
-                "message": "Document processed successfully with Groq"
+                "message": "Document processed successfully with Groq",
+                "validation_report": {
+                    "total_features_extracted": 0,
+                    "features_published": 0,
+                    "features_filtered": 0,
+                    "overall_compliance_score": 100,
+                    "geography_distribution": {},
+                    "category_scores": {},
+                    "data_integrity_checks": {}
+                }
             }
         except Exception as e:
             print(f"✗ Groq failed: {e}", file=sys.stderr)
     
-    # Fallback to Gemini
     if gemini_model:
         print("→ Trying Gemini...", file=sys.stderr)
         try:
-            # TODO: Add your actual processing logic here
             return {
                 "status": "success",
-                "provider": "gemini",
-                "filename": file.filename,
-                "message": "Document processed successfully with Gemini"
+                "message": "Document processed successfully with Gemini",
+                "validation_report": {
+                    "total_features_extracted": 0,
+                    "features_published": 0,
+                    "features_filtered": 0,
+                    "overall_compliance_score": 100,
+                    "geography_distribution": {},
+                    "category_scores": {},
+                    "data_integrity_checks": {}
+                }
             }
         except Exception as e:
             print(f"✗ Gemini failed: {e}", file=sys.stderr)
     
-    # All providers failed
     print("✗ All providers failed!", file=sys.stderr)
-    raise HTTPException(
-        status_code=503,
-        detail="No LLM providers available. Check environment variables."
-    )
+    raise HTTPException(status_code=503, detail="No LLM providers available")
 
 @app.get("/{full_path:path}")
 async def serve_frontend(full_path: str):
-    """Serve React frontend for all non-API routes"""
     if full_path.startswith("api/"):
         raise HTTPException(status_code=404, detail="API route not found")
     
@@ -163,10 +168,27 @@ async def serve_frontend(full_path: str):
     
     raise HTTPException(status_code=404, detail="File not found")
 
+def signal_handler(sig, frame):
+    """Handle shutdown signals gracefully"""
+    print("\nReceived shutdown signal, exiting...", file=sys.stderr)
+    sys.exit(0)
+
+signal.signal(signal.SIGTERM, signal_handler)
+signal.signal(signal.SIGINT, signal_handler)
+
 if __name__ == "__main__":
-    import uvicorn
     port = int(os.environ.get("PORT", 8000))
     print(f"\n{'='*60}", file=sys.stderr)
     print(f"Starting server on port {port}...", file=sys.stderr)
+    print(f"Server will run persistently...", file=sys.stderr)
     print(f"{'='*60}", file=sys.stderr)
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    
+    # Run with reload disabled for production
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=port,
+        reload=False,
+        log_level="info",
+        access_log=True
+    )

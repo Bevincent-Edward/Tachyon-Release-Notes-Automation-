@@ -14,7 +14,8 @@ from pathlib import Path
 from docx import Document
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from dotenv import load_dotenv
 import aiofiles
@@ -30,35 +31,70 @@ import google.generativeai as genai
 
 load_dotenv()
 
+import sys
+print("=" * 60, file=sys.stderr)
+print("=== APPLICATION STARTING (Full Engine) ===", file=sys.stderr)
+print("=" * 60, file=sys.stderr)
+
 app = FastAPI(title="Release Notes Processor", version="5.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-# Initialize Groq client (LPU-accelerated inference - 800+ tokens/second!)
-# Groq uses dedicated LPU infrastructure for blazing fast processing
+# Initialize Qubrid client (PRIMARY - Fast & Cheap)
+QUBRID_API_KEY = os.getenv("QUBRID_API_KEY")
+if QUBRID_API_KEY:
+    qubrid_client = AsyncOpenAI(
+        api_key=QUBRID_API_KEY,
+        base_url=os.getenv("QUBRID_BASE_URL", "https://platform.qubrid.com/v1"),
+        max_retries=0,
+        timeout=45.0
+    )
+    qubrid_model_name = os.getenv("QUBRID_MODEL", "openai/gpt-oss-20b")
+    print(f"✓ Qubrid client initialized (model: {qubrid_model_name})", file=sys.stderr)
+else:
+    qubrid_client = None
+    qubrid_model_name = None
+    print("✗ Qubrid not configured", file=sys.stderr)
+
+# Initialize Groq client (FALLBACK 1 - LPU-accelerated inference)
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 if GROQ_API_KEY:
     groq_client = AsyncOpenAI(
         api_key=GROQ_API_KEY,
-        base_url="https://api.groq.com/openai/v1",  # Groq's OpenAI-compatible endpoint
-        max_retries=0,  # DISABLE silent retries - fail fast instead
-        timeout=30.0  # 30-second timeout (Groq is FAST!)
+        base_url="https://api.groq.com/openai/v1",
+        max_retries=0,
+        timeout=30.0
     )
-    groq_model_name = "llama-3.3-70b-versatile"  # Fast, excellent quality, always available
+    groq_model_name = "llama-3.3-70b-versatile"
+    print(f"✓ Groq client initialized (model: {groq_model_name})", file=sys.stderr)
 else:
     groq_client = None
     groq_model_name = None
+    print("✗ Groq not configured", file=sys.stderr)
 
-# Initialize Gemini client (FALLBACK - token-efficient, free tier)
-# gemini-2.5-flash is fast and consumes fewer tokens
+# Initialize Gemini client (FALLBACK 2 - token-efficient, free tier)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
-    gemini_model = genai.GenerativeModel("gemini-2.5-flash")  # Fast, token-efficient
+    gemini_model = genai.GenerativeModel("gemini-2.5-flash")
+    print("✓ Gemini client initialized", file=sys.stderr)
 else:
     gemini_model = None
+    print("✗ Gemini not configured", file=sys.stderr)
+
+if not any([qubrid_client, groq_client, gemini_model]):
+    print("\n⚠️  WARNING: No LLM providers configured! Will use regex fallback.", file=sys.stderr)
 
 OUTPUT_DIR = Path(__file__).parent / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
+
+# Mount frontend build for production (Render deployment)
+frontend_build = Path(__file__).parent.parent / "frontend" / "build"
+if frontend_build.exists() and (frontend_build / "index.html").exists():
+    print(f"✓ Frontend found at: {frontend_build}", file=sys.stderr)
+    app.mount("/static", StaticFiles(directory=str(frontend_build / "static")), name="static")
+else:
+    print(f"✗ Frontend NOT found at: {frontend_build} (dev mode)", file=sys.stderr)
+    frontend_build = None
 
 
 # ============================================================================
@@ -149,7 +185,36 @@ async def enhance_text_with_llm(feature: RawFeature) -> Optional[dict]:
     Includes network tracing to debug latency.
     """
     
-    # ============ TRY GROQ FIRST (PRIMARY) ============
+    # ============ TRY QUBRID FIRST (PRIMARY) ============
+    if qubrid_client and qubrid_model_name:
+        try:
+            import time
+            start_time = time.time()
+            print(f"🟡 [{time.strftime('%H:%M:%S')}] [QUBRID] Sending: {feature.feature_name[:50]}...")
+            
+            response = await qubrid_client.chat.completions.create(
+                model=qubrid_model_name,
+                messages=[
+                    {"role": "system", "content": get_system_prompt()},
+                    {"role": "user", "content": get_user_prompt(feature)}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.3,
+                timeout=45.0
+            )
+            
+            elapsed = time.time() - start_time
+            print(f"🟢 [{time.strftime('%H:%M:%S')}] [QUBRID] Received ({elapsed:.2f}s): {feature.feature_name[:50]}...")
+            
+            llm_result = json.loads(response.choices[0].message.content)
+            if validate_llm_result(llm_result):
+                print(f"✅ [QUBRID] Success: {feature.feature_name}")
+                return llm_result
+        except Exception as e:
+            print(f"⚠️  [QUBRID] Failed for {feature.feature_name}: {type(e).__name__}: {e}")
+            print(f"   → Falling back to Groq...")
+    
+    # ============ TRY GROQ SECOND (FALLBACK 1) ============
     if groq_client and groq_model_name:
         try:
             import time
@@ -2147,10 +2212,34 @@ async def delete_file(filename: str):
 @app.get("/api/health")
 async def health_check():
     """Health check."""
-    return {"status": "healthy", "llm_available": qwen_client is not None, "version": "5.0",
-            "rubric_rules": 30, "separate_files": True, "output_dir": str(OUTPUT_DIR)}
+    return {
+        "status": "healthy",
+        "version": "5.0",
+        "providers": {
+            "qubrid": qubrid_client is not None,
+            "groq": groq_client is not None,
+            "gemini": gemini_model is not None
+        },
+        "frontend": frontend_build is not None,
+        "rubric_rules": 30,
+        "separate_files": True,
+        "output_dir": str(OUTPUT_DIR)
+    }
+
+
+# Catch-all: serve React frontend for non-API routes (Render production)
+@app.get("/{full_path:path}")
+async def serve_frontend(full_path: str):
+    """Serve React frontend for all non-API routes."""
+    if full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="API route not found")
+    if frontend_build and (frontend_build / "index.html").exists():
+        return FileResponse(str(frontend_build / "index.html"))
+    raise HTTPException(status_code=503, detail="Frontend not built. Use React dev server on port 3000.")
 
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.environ.get("PORT", 8000))
+    print(f"Starting server on port {port}...", file=sys.stderr)
+    uvicorn.run(app, host="0.0.0.0", port=port)

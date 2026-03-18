@@ -16,7 +16,7 @@ services:
       CI=false npm run build &&
       echo "=== FRONTEND BUILT ===" &&
       ls -la build/
-    startCommand: python3 -m uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    startCommand: python3 -m uvicorn backend.maincopy:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:
