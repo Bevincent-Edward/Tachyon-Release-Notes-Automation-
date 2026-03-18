@@ -7,11 +7,13 @@ import sys
 import signal
 import json
 import re
+import zipfile
+import io
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from docx import Document
 from openai import AsyncOpenAI
@@ -45,7 +47,6 @@ gemini_model = genai.GenerativeModel("gemini-2.5-flash") if GEMINI_API_KEY else 
 # ============================================================================
 # LOGO FIX - SERVE FROM MULTIPLE LOCATIONS
 # ============================================================================
-# Path to logo file - check multiple locations
 LOGO_PATHS = [
     Path(__file__).parent.parent / "frontend" / "public" / "zetalogo.png",
     Path(__file__).parent.parent / "frontend" / "build" / "zetalogo.png",
@@ -53,7 +54,6 @@ LOGO_PATHS = [
     Path(__file__).parent.parent / "zetalogo.png",
 ]
 
-# Find the first existing logo
 LOGO_FILE = None
 for path in LOGO_PATHS:
     if path.exists():
@@ -62,7 +62,7 @@ for path in LOGO_PATHS:
         break
 
 if not LOGO_FILE:
-    print(f"\n⚠️ Logo file not found! Checked: {[str(p) for p in LOGO_PATHS]}", file=sys.stderr)
+    print(f"\n⚠️ Logo file not found!", file=sys.stderr)
 
 # Frontend build directory
 frontend_build = Path(__file__).parent.parent / "frontend" / "build"
@@ -81,7 +81,6 @@ def enforce_acronym_formatting(text: str) -> str:
     if not text:
         return text
     
-    # List of common acronyms to bold
     acronyms = [
         'UPI', 'SFTP', 'NPCI', 'API', 'ANV', 'POS', 'IMPS', 'NEFT', 'RTGS',
         'BIN', 'ACS', 'SCOF', 'EMV', '3DS', 'OTP', 'KYC', 'AML', 'SAR',
@@ -92,7 +91,6 @@ def enforce_acronym_formatting(text: str) -> str:
     
     result = text
     for acronym in acronyms:
-        # Bold if not already bolded (use negative lookbehind/lookahead)
         pattern = r'(?<!\*)\b' + acronym + r'\b(?!\*)'
         replacement = f'**{acronym}**'
         result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
@@ -104,22 +102,19 @@ def enforce_lead_line(items: List[str], lead_type: str) -> str:
     if not items:
         return ""
     
-    # Format bullets (strip periods)
     bullets = [f"- {item.rstrip('.')}" for item in items]
     
-    # Add lead line if 3+ items (Rubric Step 3)
     if len(items) >= 3:
         if lead_type == "enhancement":
             lead = "The enhancement introduces the following:"
-        else:  # impact
+        else:
             lead = "The impact of the enhancement is detailed below:"
         return f"{lead}\n\n" + "\n".join(bullets)
     else:
-        # 1-2 items: just bullets, no lead line
         return "\n".join(bullets)
 
 # ============================================================================
-# RUBRIC-BASED SYSTEM PROMPT (SIMPLIFIED - LLM ONLY HANDLES LANGUAGE)
+# RUBRIC-BASED SYSTEM PROMPT (SIMPLIFIED)
 # ============================================================================
 RUBRIC_SYSTEM_PROMPT = """You are an expert technical writer for enterprise SaaS release notes.
 
@@ -337,7 +332,6 @@ async def apply_complete_conversion(feature: RawFeature):
         enhancement_text = ""
         if llm_result.get("enhancement_bullets"):
             enhancement_text = enforce_lead_line(llm_result["enhancement_bullets"], "enhancement")
-            # Apply acronym bolding to each bullet
             enhancement_text = enforce_acronym_formatting(enhancement_text)
         else:
             enhancement_text = enforce_acronym_formatting(llm_result.get("enhancement", feature.enhancement))
@@ -346,7 +340,6 @@ async def apply_complete_conversion(feature: RawFeature):
         impact_text = ""
         if llm_result.get("impact_bullets"):
             impact_text = enforce_lead_line(llm_result["impact_bullets"], "impact")
-            # Apply acronym bolding to each bullet
             impact_text = enforce_acronym_formatting(impact_text)
         else:
             impact_text = enforce_acronym_formatting(llm_result.get("impact", feature.impact))
@@ -550,11 +543,37 @@ async def download_file(filename: str):
 
 @app.get("/api/download-all")
 async def download_all():
-    """Download all files"""
+    """Download all markdown files as ZIP"""
+    if not OUTPUT_DIR.exists():
+        raise HTTPException(status_code=404, detail="No files to download")
+    
+    # Create ZIP file in memory
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        # Add all markdown files
+        for file_path in OUTPUT_DIR.iterdir():
+            if file_path.is_file() and file_path.suffix == '.md':
+                zip_file.write(file_path, file_path.name)
+    
+    zip_buffer.seek(0)
+    
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/x-zip-compressed",
+        headers={"Content-Disposition": "attachment; filename=release_notes.zip"}
+    )
+
+@app.get("/api/download-consolidated")
+async def download_consolidated():
+    """Download consolidated release notes"""
     consolidated_path = OUTPUT_DIR / "release_notes_consolidated.md"
     if consolidated_path.exists():
-        return FileResponse(path=str(consolidated_path), filename="release_notes_consolidated.md", media_type="text/markdown")
-    raise HTTPException(status_code=404, detail="No files to download")
+        return FileResponse(
+            path=str(consolidated_path),
+            filename="release_notes_consolidated.md",
+            media_type="text/markdown"
+        )
+    raise HTTPException(status_code=404, detail="Consolidated file not found")
 
 @app.get("/api/logo")
 async def get_logo():
