@@ -11,7 +11,8 @@ import ZetaLoader from './components/ZetaLoader';
 import ZetaUploadCard from './components/ZetaUploadCard';
 import ZetaFeatureCard from './components/ZetaFeatureCard';
 
-const API_BASE_URL = 'http://localhost:8000/api';
+// Use relative URL for API (works on Render and localhost)
+const API_BASE_URL = '/api';
 
 function App() {
   const [file, setFile] = useState(null);
