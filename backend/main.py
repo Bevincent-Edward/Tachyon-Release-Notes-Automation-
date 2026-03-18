@@ -122,8 +122,20 @@ def extract_tables_from_docx(file_path: str) -> List[RawFeature]:
 
 def filter_publishable_features(features: List[RawFeature]) -> List[RawFeature]:
     """Filter features marked for external publication"""
-    publishable = [f for f in features if f.publish_externally.strip().lower() == "yes"]
+    publishable = []
+    for f in features:
+        publish_value = f.publish_externally.strip().lower()
+        # Accept various forms of "yes"
+        if publish_value in ['yes', 'y', 'true', '1', 'enabled']:
+            publishable.append(f)
+    
     print(f"Publishable: {len(publishable)} features", file=sys.stderr)
+    
+    # If no publishable found, use all features as fallback
+    if not publishable and features:
+        print(f"⚠️ No features marked 'Yes' for publication, using all {len(features)} features", file=sys.stderr)
+        return features
+    
     return publishable
 
 # ============================================================================
