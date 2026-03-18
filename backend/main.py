@@ -1,6 +1,6 @@
 """
-Release Notes Processor - RUBRIC-COMPLIANT PRODUCTION VERSION
-Implements all rules from Rubric.txt
+Release Notes Processor - RUBRIC-COMPLIANT WITH CHAIN-OF-THOUGHT
+Implements all rules from Rubric.txt with enhanced LLM accuracy
 """
 import os
 import sys
@@ -13,6 +13,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from docx import Document
 from openai import AsyncOpenAI
 import google.generativeai as genai
@@ -44,17 +45,22 @@ qubrid_client = AsyncOpenAI(api_key=QUBRID_API_KEY, base_url=QUBRID_BASE_URL) if
 groq_client = AsyncOpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1") if GROQ_API_KEY else None
 gemini_model = genai.GenerativeModel("gemini-2.5-flash") if GEMINI_API_KEY else None
 
-# Frontend
+# Frontend - serve from build directory
 frontend_build = Path(__file__).parent.parent / "frontend" / "build"
+public_dir = Path(__file__).parent.parent / "frontend" / "public"
+
 if frontend_build.exists() and (frontend_build / "index.html").exists():
-    print(f"\n✓ Frontend: {frontend_build}", file=sys.stderr)
+    print(f"\n✓ Frontend build: {frontend_build}", file=sys.stderr)
     app.mount("/static", StaticFiles(directory=str(frontend_build / "static")), name="static")
+
+if public_dir.exists():
+    print(f"✓ Public directory: {public_dir}", file=sys.stderr)
 
 OUTPUT_DIR = Path(__file__).parent / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 # ============================================================================
-# RUBRIC-BASED SYSTEM PROMPT
+# RUBRIC-BASED SYSTEM PROMPT WITH CHAIN-OF-THOUGHT
 # ============================================================================
 RUBRIC_SYSTEM_PROMPT = """You are an expert technical writer for enterprise SaaS release notes.
 
@@ -99,21 +105,19 @@ STEP 3: STRUCTURE FOR EACH FEATURE
    - Present tense
    - State what is missing or inefficient
    - NO temporal words: "existing", "current", "now", "currently", "previously"
+   - Must be a complete sentence ending with a period
 
 4. ENHANCEMENT
    - Present tense
-   - 1-2 enhancements: Write as paragraph
-   - 3+ enhancements: Use lead line + bullets
-     Lead lines: "With this enhancement," or "The enhancement introduces the following:"
-   - Bullet points: NO periods at end
+   - Return as ARRAY of bullet points (NO lead line, NO hyphens, NO periods)
+   - Python will add lead line and format bullets
+   - Example: ["Enables biometric authentication", "Stores public keys securely"]
 
 5. IMPACT
    - Present tense
-   - 1-2 impacts: Write as paragraph
-   - 3+ impacts: Use lead line + bullets
-     Lead line: "The impact of the enhancement is detailed below:"
-     Bullets: "Allows users to", "Enables agents to", "Increases efficiency"
-   - Bullet points: NO periods at end
+   - Return as ARRAY of bullet points (NO lead line, NO hyphens, NO periods)
+   - Python will add lead line and format bullets
+   - Example: ["Improves security", "Reduces fraud"]
 
 STEP 4: FORMATTING RULES
 - Only COMPLETE sentences end with periods
@@ -137,13 +141,31 @@ STEP 7: MARKDOWN OUTPUT
 - H2+ headings: Sentence case
 
 =============================================================================
-OUTPUT FORMAT - RETURN JSON:
+OUTPUT FORMAT - RETURN EXACTLY THIS JSON STRUCTURE:
+=============================================================================
 {
+  "identified_acronyms": ["List", "every", "acronym", "found", "in", "the", "source", "text"],
   "refined_title": "Title Case, starts with noun, max 12 words",
   "description": "Past tense, 1-2 lines, starts with 'Introduced...'",
-  "problem_statement": "Present tense, no temporal words",
-  "enhancement": "Present tense, with lead line if 3+ items",
-  "impact": "Present tense, with lead line if 3+ items"
+  "problem_statement": "Present tense, complete sentence ending with a period. No temporal words.",
+  "enhancement_bullets": ["First enhancement item", "Second enhancement item"],
+  "impact_bullets": ["First impact outcome", "Second impact outcome"]
+}
+
+IMPORTANT CHAIN-OF-THOUGHT PROCESS:
+1. FIRST: Scan the entire text and list ALL acronyms in identified_acronyms array
+2. SECOND: Use that list to ensure EVERY acronym is wrapped in **bold** in your output
+3. THIRD: Return enhancement and impact as CLEAN ARRAYS (no lead lines, no hyphens, no periods)
+4. Python will handle all formatting (lead lines, bullet hyphens, period removal)
+
+EXAMPLE OUTPUT:
+{
+  "identified_acronyms": ["UPI", "API", "SFTP", "NPCI"],
+  "refined_title": "Biometric Authentication for UPI Transactions",
+  "description": "Introduced biometric authentication for UPI transactions to enhance security.",
+  "problem_statement": "Users need secure authentication for UPI payments.",
+  "enhancement_bullets": ["Enables biometric validation for UPI payments", "Stores public keys from user devices"],
+  "impact_bullets": ["Improves transaction security", "Reduces fraud risk"]
 }
 =============================================================================
 """
@@ -174,6 +196,7 @@ class ProcessedFeature:
         self.tag = data.get("tag", "")
         self.geography = data.get("geography", "All")
         self.ui_changes = data.get("ui_changes")
+        self.reports_extracts = data.get("reports_extracts")
         self.audit_logs = data.get("audit_logs", "Disabled")
 
 # ============================================================================
@@ -235,10 +258,10 @@ def filter_publishable_features(features: List[RawFeature]) -> List[RawFeature]:
     return publishable
 
 # ============================================================================
-# LLM PROCESSING WITH RUBRIC COMPLIANCE
+# LLM PROCESSING WITH CHAIN-OF-THOUGHT
 # ============================================================================
 async def process_with_llm(client, feature: RawFeature, provider: str):
-    """Process feature with LLM using Rubric-based prompt"""
+    """Process feature with LLM using Chain-of-Thought for acronym accuracy"""
     user_prompt = f"""
 Feature Name: {feature.feature_name}
 Product Module: {feature.product_module}
@@ -246,7 +269,7 @@ Problem Statement: {feature.problem_statement}
 Enhancement: {feature.enhancement}
 Impact: {feature.impact}
 
-Convert this to rubric-compliant release notes. Return ONLY JSON."""
+Convert this to rubric-compliant release notes. Return ONLY JSON with identified_acronyms array first."""
     
     # Use appropriate model based on provider
     model_name = "openai/gpt-oss-20b" if provider == "qubrid" else "llama-3.3-70b-versatile"
@@ -266,7 +289,7 @@ Convert this to rubric-compliant release notes. Return ONLY JSON."""
     return json.loads(response.choices[0].message.content)
 
 async def apply_complete_conversion(feature: RawFeature):
-    """Apply LLM conversion with Rubric compliance and fallback chain"""
+    """Apply LLM conversion with Chain-of-Thought and fallback chain"""
     llm_result = None
     
     # PRIMARY: Try Qubrid first (openai/gpt-oss-20b)
@@ -275,6 +298,9 @@ async def apply_complete_conversion(feature: RawFeature):
             print(f"  → Qubrid (openai/gpt-oss-20b)...", file=sys.stderr)
             llm_result = await process_with_llm(qubrid_client, feature, "qubrid")
             print(f"  ✓ Qubrid success", file=sys.stderr)
+            # Log identified acronyms for verification
+            if llm_result and 'identified_acronyms' in llm_result:
+                print(f"    Identified acronyms: {llm_result['identified_acronyms']}", file=sys.stderr)
         except Exception as e:
             print(f"  ✗ Qubrid failed: {e}", file=sys.stderr)
     
@@ -292,7 +318,7 @@ async def apply_complete_conversion(feature: RawFeature):
         try:
             print(f"  → Gemini (gemini-2.5-flash)...", file=sys.stderr)
             response = await gemini_model.generate_content_async(
-                f"{RUBRIC_SYSTEM_PROMPT}\n\n{feature.feature_name}\nProblem: {feature.problem_statement}\nEnhancement: {feature.enhancement}\nImpact: {feature.impact}\n\nReturn ONLY JSON"
+                f"{RUBRIC_SYSTEM_PROMPT}\n\n{feature.feature_name}\nProblem: {feature.problem_statement}\nEnhancement: {feature.enhancement}\nImpact: {feature.impact}\n\nReturn ONLY JSON with identified_acronyms array"
             )
             llm_result = json.loads(response.text.strip())
             print(f"  ✓ Gemini success", file=sys.stderr)
@@ -301,15 +327,33 @@ async def apply_complete_conversion(feature: RawFeature):
     
     # Use LLM result or fallback to basic formatting
     if llm_result:
+        # CHAIN-OF-THOUGHT: Build enhancement and impact from arrays (Python handles formatting)
+        enhancement_text = ""
+        if llm_result.get("enhancement_bullets"):
+            # Python adds lead line and formats bullets - guarantees no periods
+            bullets = [f"- {b.rstrip('.')}" for b in llm_result["enhancement_bullets"]]
+            enhancement_text = "\n".join(bullets)
+        else:
+            enhancement_text = llm_result.get("enhancement", feature.enhancement)
+
+        impact_text = ""
+        if llm_result.get("impact_bullets"):
+            # Python adds lead line and formats bullets - guarantees no periods
+            bullets = [f"- {b.rstrip('.')}" for b in llm_result["impact_bullets"]]
+            impact_text = "\n".join(bullets)
+        else:
+            impact_text = llm_result.get("impact", feature.impact)
+
         return ProcessedFeature({
             "title": llm_result.get("refined_title", feature.feature_name),
             "description": llm_result.get("description", f"Introduced {feature.feature_name}"),
             "problem_statement": llm_result.get("problem_statement", feature.problem_statement),
-            "enhancement": llm_result.get("enhancement", feature.enhancement),
-            "impact": llm_result.get("impact", feature.impact),
+            "enhancement": enhancement_text,
+            "impact": impact_text,
             "tag": feature.product_module,
             "geography": feature.geography,
             "ui_changes": feature.ui_changes if feature.ui_changes and feature.ui_changes.lower() not in ['na', 'none', '-', ''] else None,
+            "reports_extracts": feature.reports_extracts if feature.reports_extracts and feature.reports_extracts.lower() not in ['na', 'none', '-', ''] else None,
             "audit_logs": "Enabled" if feature.audit_logs and feature.audit_logs.lower() in ['yes', 'y', 'enabled'] else "Disabled"
         })
     else:
@@ -323,6 +367,7 @@ async def apply_complete_conversion(feature: RawFeature):
             "tag": feature.product_module,
             "geography": feature.geography,
             "ui_changes": feature.ui_changes if feature.ui_changes and feature.ui_changes.lower() not in ['na', 'none', '-'] else None,
+            "reports_extracts": feature.reports_extracts if feature.reports_extracts and feature.reports_extracts.lower() not in ['na', 'none', '-'] else None,
             "audit_logs": "Enabled" if feature.audit_logs and feature.audit_logs.lower() in ['yes', 'y', 'enabled'] else "Disabled"
         })
 
@@ -342,7 +387,7 @@ def create_filename_from_title(title: str) -> str:
         filename = filename[:50]
     return filename + ".md"
 
-def generate_single_feature_markdown(feature: ProcessedFeature) -> str:
+def generate_single_feature_markdown(feature: ProcessedFeature) -> tuple:
     """Generate markdown for single feature (Rubric Step 7)"""
     filename = create_filename_from_title(feature.title)
     
@@ -373,6 +418,10 @@ tag: {feature.tag}
     if feature.ui_changes:
         md += f"\n## User Interface Changes\n\n{feature.ui_changes}\n"
     
+    # Add Reports and Extracts only if present (Rubric Step 5 - FIX)
+    if feature.reports_extracts:
+        md += f"\n## Reports and Extracts\n\n{feature.reports_extracts}\n"
+    
     # Add Audit Logs (Rubric Step 5)
     md += f"\n## Audit Logs\n\n{feature.audit_logs}\n"
     
@@ -390,9 +439,21 @@ def generate_consolidated_markdown(features: List[ProcessedFeature]) -> str:
         for feature in all_features:
             md += f"### {feature.title}\n\n"
             md += f"**{feature.description}**\n\n"
-            md += f"#### Problem Statement\n{feature.problem_statement}\n\n"
-            md += f"#### Enhancement\n{feature.enhancement}\n\n"
-            md += f"#### Impact\n{feature.impact}\n\n"
+            md += f"#### Problem Statement\n\n{feature.problem_statement}\n\n"
+            md += f"#### Enhancement\n\n{feature.enhancement}\n\n"
+            md += f"#### Impact\n\n{feature.impact}\n\n"
+            
+            # FIX: Add UI Changes if present (was missing before!)
+            if feature.ui_changes:
+                md += f"#### User Interface Changes\n\n{feature.ui_changes}\n\n"
+            
+            # FIX: Add Reports and Extracts if present (was missing before!)
+            if feature.reports_extracts:
+                md += f"#### Reports and Extracts\n\n{feature.reports_extracts}\n\n"
+            
+            # FIX: Add Audit Logs (was missing before!)
+            md += f"#### Audit Logs\n\n{feature.audit_logs}\n\n"
+            
             md += "---\n\n"
     
     return md
@@ -498,7 +559,6 @@ async def download_file(filename: str):
 @app.get("/api/download-all")
 async def download_all():
     """Download all files as ZIP"""
-    # For now, redirect to consolidated file
     consolidated_path = OUTPUT_DIR / "release_notes_consolidated.md"
     if consolidated_path.exists():
         return FileResponse(
@@ -513,6 +573,7 @@ async def process_document(file: UploadFile = File(...)):
     print(f"\n{'='*60}", file=sys.stderr)
     print(f"PROCESSING: {file.filename}", file=sys.stderr)
     print(f"Model: openai/gpt-oss-20b (Qubrid) with fallbacks", file=sys.stderr)
+    print(f"Using Chain-of-Thought for acronym accuracy", file=sys.stderr)
     print(f"{'='*60}", file=sys.stderr)
     
     # Save uploaded file
@@ -529,7 +590,7 @@ async def process_document(file: UploadFile = File(...)):
             raise HTTPException(status_code=400, detail="No publishable features found")
         
         # Process each feature with LLM
-        print("\nProcessing features with LLM (Rubric-compliant)...", file=sys.stderr)
+        print("\nProcessing features with LLM (Rubric-compliant, Chain-of-Thought)...", file=sys.stderr)
         processed_features = []
         feature_validations = []
         
@@ -659,18 +720,24 @@ async def serve_frontend(full_path: str):
     if full_path.startswith("api/"):
         raise HTTPException(status_code=404, detail="API route not found")
     
-    if not frontend_build.exists():
-        raise HTTPException(status_code=503, detail="Frontend not built")
-    
-    # Serve logo
-    if full_path == "zetalogo.png" or full_path.endswith(".png"):
-        logo_path = frontend_build / full_path
-        if logo_path.exists():
-            return FileResponse(str(logo_path))
-    
-    index_file = frontend_build / "index.html"
-    if index_file.exists():
-        return FileResponse(str(index_file))
+    # Try frontend build directory first
+    if frontend_build.exists():
+        # Handle static assets
+        if full_path.startswith("static/"):
+            asset_path = frontend_build / full_path
+            if asset_path.exists() and asset_path.is_file():
+                return FileResponse(str(asset_path))
+        
+        # Handle logo and other public assets
+        if public_dir.exists():
+            public_asset = public_dir / full_path
+            if public_asset.exists() and public_asset.is_file():
+                return FileResponse(str(public_asset))
+        
+        # Serve index.html for SPA routing
+        index_file = frontend_build / "index.html"
+        if index_file.exists():
+            return FileResponse(str(index_file))
     
     raise HTTPException(status_code=404, detail="File not found")
 
@@ -691,5 +758,6 @@ if __name__ == "__main__":
     print(f"PRIMARY MODEL: openai/gpt-oss-20b (Qubrid)", file=sys.stderr)
     print(f"FALLBACK 1: llama-3.3-70b-versatile (Groq)", file=sys.stderr)
     print(f"FALLBACK 2: gemini-2.5-flash (Gemini)", file=sys.stderr)
+    print(f"Chain-of-Thought: Enabled for acronym accuracy", file=sys.stderr)
     print(f"{'='*60}", file=sys.stderr)
     uvicorn.run(app, host="0.0.0.0", port=port, reload=False)
