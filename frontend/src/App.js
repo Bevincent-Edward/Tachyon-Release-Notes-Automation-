@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
 import './App.css';
@@ -7,9 +7,10 @@ import './comprehensive-fixes.css';
 import './validation-styles.css';
 import './final-ui-fixes.css';
 import './data-dashboard.css';
+import './home-page.css';
 import ZetaLoader from './components/ZetaLoader';
-import ZetaUploadCard from './components/ZetaUploadCard';
-import ZetaFeatureCard from './components/ZetaFeatureCard';
+// ZetaUploadCard replaced by inline portal in home page
+import ValidationSection from './components/ValidationSection';
 
 // Use relative URL for API (works on Render and localhost)
 const API_BASE_URL = '/api';
@@ -25,11 +26,9 @@ function App() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [fileContent, setFileContent] = useState(null);
   const [loadingFile, setLoadingFile] = useState(false);
-  const [health, setHealth] = useState(null);
+  const [, setHealth] = useState(null);
   const [activeTab, setActiveTab] = useState('upload');
-  const [showValidation, setShowValidation] = useState(false);
   const [validationData, setValidationData] = useState(null);
-  const [selectedViz, setSelectedViz] = useState('heatmap');
 
   useEffect(() => {
     fetchHealth();
@@ -54,40 +53,7 @@ function App() {
     }
   };
 
-  const handleDragEnter = useCallback((e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(true);
-  }, []);
-
-  const handleDragLeave = useCallback((e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-  }, []);
-
-  const handleDragOver = useCallback((e) => {
-    e.preventDefault();
-    e.stopPropagation();
-  }, []);
-
-  const handleDrop = useCallback((e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-
-    const droppedFiles = e.dataTransfer.files;
-    if (droppedFiles.length > 0) {
-      const file = droppedFiles[0];
-      if (file.name.endsWith('.docx')) {
-        setFile(file);
-        setError(null);
-        simulateUploadProgress();
-      } else {
-        setError('Please upload a .docx file');
-      }
-    }
-  }, []);
+  // Drag handlers inlined into the home page portal
 
   const simulateUploadProgress = () => {
     setUploadProgress(0);
@@ -102,17 +68,7 @@ function App() {
     }, 200);
   };
 
-  const handleFileSelect = (e) => {
-    const selectedFile = e.target.files[0];
-    if (selectedFile) {
-      setFile(selectedFile);
-      setError(null);
-      simulateUploadProgress();
-    }
-  };
-
-  // Used in upload card
-  // const handleFileSelect = (e) => {...}
+  // File select handler inlined into portal
 
   const handleUpload = async () => {
     if (!file) return;
@@ -166,13 +122,34 @@ function App() {
   };
 
   const downloadFile = async (filename) => {
-    window.open(`${API_BASE_URL}/download/${filename}`, '_blank');
+    try {
+      const res = await axios.get(`${API_BASE_URL}/download/${filename}`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError('Failed to download file');
+    }
   };
 
-  const downloadCSV = async () => {
-    const csvFiles = files.filter(f => f.type === 'validation_csv');
-    if (csvFiles.length > 0) {
-      downloadFile(csvFiles[0].filename);
+  const downloadAll = async () => {
+    try {
+      const res = await axios.get(`${API_BASE_URL}/download-all`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'release_notes.zip';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError('Failed to download files');
     }
   };
 
@@ -208,355 +185,9 @@ function App() {
     return 'var(--status-danger)';
   };
 
-  const toggleValidation = () => {
-    setShowValidation(!showValidation);
-  };
+  // Visualization components moved to ValidationSection.js
 
-  // toggleValidation used for future feature
-  // const toggleValidation = () => {...}
-
-  // Visualization Components - CLEAN DASHBOARD STYLE
-  const ComplianceDashboard = ({ data }) => {
-    if (!data || !data.data) return null;
-
-    // Calculate average compliance
-    const allScores = data.data.flatMap(row => 
-      data.categories.map(cat => row.scores[cat] || 100)
-    );
-    const avgCompliance = Math.round(allScores.reduce((a, b) => a + b, 0) / allScores.length);
-
-    return (
-      <div className="data-dashboard">
-        {/* Overall Score Card */}
-        <div className="dashboard-card">
-          <div className="dashboard-card-header">
-            <div className="dashboard-card-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10"/>
-                <path d="M12 6v6l4 2"/>
-              </svg>
-            </div>
-            <h3 className="dashboard-card-title">Overall Compliance</h3>
-          </div>
-          <div className="score-ring-container">
-            <div className="score-ring">
-              <svg className="score-ring-svg" viewBox="0 0 100 100">
-                <defs>
-                  <linearGradient id="scoreGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#e81cff"/>
-                    <stop offset="50%" stopColor="#9d4edd"/>
-                    <stop offset="100%" stopColor="#40c9ff"/>
-                  </linearGradient>
-                </defs>
-                <circle className="score-ring-bg" cx="50" cy="50" r="40"/>
-                <circle 
-                  className="score-ring-fill" 
-                  cx="50" 
-                  cy="50" 
-                  r="40"
-                  strokeDasharray={`${avgCompliance * 2.51} 251`}
-                  strokeDashoffset="0"
-                />
-              </svg>
-              <div className="score-ring-value">{avgCompliance}%</div>
-            </div>
-            <div className="score-ring-label">Average Score</div>
-          </div>
-        </div>
-
-        {/* Category Scores Card */}
-        <div className="dashboard-card" style={{ gridColumn: 'span 2' }}>
-          <div className="dashboard-card-header">
-            <div className="dashboard-card-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 20V10M18 20V4M6 20v-4"/>
-              </svg>
-            </div>
-            <h3 className="dashboard-card-title">Category Scores</h3>
-          </div>
-          <div>
-            {data.categories.map((cat, i) => {
-              const scores = data.data.map(row => row.scores[cat] || 100);
-              const avgScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
-              return (
-                <div key={i} className="category-score-item">
-                  <div className="category-score-name">{cat}</div>
-                  <div className="category-score-bar">
-                    <div 
-                      className="category-score-fill" 
-                      style={{ width: `${avgScore}%` }}
-                    />
-                  </div>
-                  <div className="category-score-value">{avgScore}%</div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const GeographyDashboard = ({ data }) => {
-    if (!data || !data.counts) return null;
-
-    const maxCount = Math.max(...Object.values(data.counts), 1);
-
-    return (
-      <div className="geography-dashboard">
-        {Object.entries(data.counts).map(([region, count]) => {
-          const percentage = Math.round((count / maxCount) * 100);
-          return (
-            <div key={region} className="geo-dashboard-card">
-              <div className="geo-dashboard-flag">
-                {region === 'Global' ? '🌍' : region === 'India' ? '🇮🇳' : '🇺🇸'}
-              </div>
-              <div className="geo-dashboard-name">{region}</div>
-              <div className="geo-dashboard-count">{count}</div>
-              <div className="geo-dashboard-label">Features</div>
-              <div className="geo-dashboard-bar">
-                <div 
-                  className="geo-dashboard-bar-fill" 
-                  style={{ width: `${percentage}%` }}
-                />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
-
-  const ViolationsDashboard = ({ data }) => {
-    if (!data || !data.category_scores) return null;
-
-    const violations = Object.entries(data.category_scores)
-      .filter(([_, score]) => score < 100)
-      .map(([category, score]) => ({
-        category,
-        violations: Math.round((100 - score) / 10)
-      }));
-
-    return (
-      <div className="violations-dashboard">
-        {violations.map((violation, i) => (
-          <div key={i} className="violation-type-card">
-            <div className="violation-type-icon">⚠️</div>
-            <div className="violation-type-count">{violation.violations}</div>
-            <div className="violation-type-label">{violation.category}</div>
-          </div>
-        ))}
-      </div>
-    );
-  };
-
-  const FeatureComplianceDashboard = ({ data }) => {
-    if (!data || !data.feature_validations) return null;
-
-    return (
-      <div className="feature-compliance-breakdown">
-        {data.feature_validations.map((feature, i) => (
-          <div key={i} className="compliance-item">
-            <div className="compliance-item-header">
-              <div className="compliance-feature-full">{feature.feature_name}</div>
-              <div 
-                className="compliance-score-badge"
-                data-score={Math.round(feature.compliance_score)}
-              >
-                {Math.round(feature.compliance_score)}%
-              </div>
-            </div>
-            <div className="compliance-progress-container">
-              <div 
-                className="compliance-progress-fill"
-                data-score={Math.round(feature.compliance_score)}
-                style={{ width: `${feature.compliance_score}%` }}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  };
-
-  const BeforeAfterDashboard = ({ data }) => {
-    if (!data || !data.comparisons) return null;
-
-    return (
-      <div className="before-after-comparison">
-        {data.comparisons.slice(0, 5).map((comp, i) => (
-          <div key={i}>
-            <div className="comparison-card before">
-              <div className="comparison-header before">
-                <div className="comparison-title">Before</div>
-              </div>
-              <div className="comparison-content">
-                <div className="comparison-text">{comp.before.title}</div>
-              </div>
-            </div>
-          </div>
-        ))}
-        {data.comparisons.slice(0, 5).map((comp, i) => (
-          <div key={i}>
-            <div className="comparison-card after">
-              <div className="comparison-header after">
-                <div className="comparison-title">After</div>
-              </div>
-              <div className="comparison-content">
-                <div className="comparison-text">
-                  <strong>{comp.after.title}</strong>
-                </div>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  };
-
-  const FeaturePie = ({ data }) => {
-    if (!data || !data.segments) return null;
-    
-    const total = data.segments.reduce((acc, seg) => acc + seg.value, 0);
-    const publishedPercent = data.percentages?.Published || 0;
-    
-    return (
-      <div className="pie-chart-viz">
-        <div className="pie-chart">
-          <svg viewBox="0 0 100 100" className="pie-svg">
-            <circle
-              cx="50"
-              cy="50"
-              r="40"
-              fill="transparent"
-              stroke="#ef4444"
-              strokeWidth="20"
-              strokeDasharray={`${(100 - publishedPercent) * 2.51} 251`}
-              transform="rotate(-90 50 50)"
-            />
-            <circle
-              cx="50"
-              cy="50"
-              r="40"
-              fill="transparent"
-              stroke="#10b981"
-              strokeWidth="20"
-              strokeDasharray={`${publishedPercent * 2.51} 251`}
-              strokeDashoffset="0"
-              transform="rotate(-90 50 50)"
-            />
-          </svg>
-          <div className="pie-center">
-            <span className="pie-total">{total}</span>
-            <span className="pie-label">Total</span>
-          </div>
-        </div>
-        <div className="pie-legend">
-          {data.segments.map((seg, i) => (
-            <div key={i} className="pie-legend-item">
-              <div className="legend-color" style={{ backgroundColor: seg.color }} />
-              <span className="legend-label">{seg.label}</span>
-              <span className="legend-value">{seg.value} ({data.percentages?.[seg.label]}%)</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  // BeforeAfterComparison - Replaced with BeforeAfterDashboard
-  // const BeforeAfterComparison = ({ data }) => {...}
-
-  // DUPLICATE REMOVED - Using the one at line 381
-  // const BeforeAfterDashboard = ({ data }) => {...}
-
-  // RadarChart - Replaced with cleaner dashboard components
-  // const RadarChart = ({ data }) => {...}
-
-  // DUPLICATE REMOVED - Using FeaturePie at line 416
-  // const FeaturePie = ({ data }) => {...}
-
-  const StackedBarChart = ({ data }) => {
-    if (!data || !data.bars) return null;
-    
-    return (
-      <div className="stacked-bar-viz">
-        {data.bars.slice(0, 8).map((bar, i) => (
-          <div key={i} className="stacked-bar-item">
-            <div className="stacked-bar-label">{bar.feature}</div>
-            <div className="stacked-bar-container">
-              <div
-                className="stacked-bar-segment passed"
-                style={{
-                  width: `${(bar.passed / bar.total) * 100}%`,
-                  backgroundColor: data.colors.passed
-                }}
-                title={`Passed: ${bar.passed}`}
-              />
-              <div
-                className="stacked-bar-segment failed"
-                style={{
-                  width: `${(bar.failed / bar.total) * 100}%`,
-                  backgroundColor: data.colors.failed
-                }}
-                title={`Failed: ${bar.failed}`}
-              />
-            </div>
-            <div className="stacked-bar-value">{bar.compliance}%</div>
-          </div>
-        ))}
-        <div className="stacked-bar-legend">
-          <div className="legend-item">
-            <div className="legend-segment" style={{ backgroundColor: data.colors.passed }} />
-            <span>Passed</span>
-          </div>
-          <div className="legend-item">
-            <div className="legend-segment" style={{ backgroundColor: data.colors.failed }} />
-            <span>Failed</span>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const ViolationsChart = ({ data }) => {
-    if (!data || !data.categories || data.total_violations === 0) {
-      return (
-        <div className="no-violations">
-          <div className="no-violations-icon">✅</div>
-          <p>No violations detected!</p>
-        </div>
-      );
-    }
-    
-    const maxCount = Math.max(...data.counts, 1);
-    
-    return (
-      <div className="violations-chart-viz">
-        <div className="violations-bars">
-          {data.categories.map((cat, i) => (
-            <div key={i} className="violation-bar-item">
-              <div className="violation-bar-container">
-                <div
-                  className="violation-bar-fill"
-                  style={{
-                    width: `${(data.counts[i] / maxCount) * 100}%`,
-                    background: `linear-gradient(90deg, ${data.colors[i % data.colors.length]}, ${data.colors[(i + 1) % data.colors.length]}88)`
-                  }}
-                />
-              </div>
-              <div className="violation-bar-label">{cat}</div>
-              <div className="violation-bar-value">{data.counts[i]}</div>
-            </div>
-          ))}
-        </div>
-        <div className="violations-total">
-          <span className="total-label">Total Violations</span>
-          <span className="total-value">{data.total_violations}</span>
-        </div>
-      </div>
-    );
-  };
+  // Visualization components moved to ValidationSection.js
 
   return (
     <div className="app">
@@ -620,107 +251,129 @@ function App() {
 
       {/* Main Content */}
       <main className="main-content">
-        {/* Upload Tab */}
+        {/* Upload Tab — Cosmic Portal */}
         {activeTab === 'upload' && (
-          <div className="upload-section fade-in">
-            {/* Main Upload Area */}
-            <div className="upload-container">
-              <div className="upload-header">
-                <h2 className="upload-title">Upload Release Notes</h2>
-                <p className="upload-subtitle">Transform engineering drafts into polished release notes</p>
+          <div className="home-aurora">
+            {/* Hero */}
+            <div className="home-hero">
+              <div className="home-eyebrow">
+                <span className="home-eyebrow-dot" />
+                AI-Powered Automation
               </div>
+              <h2 className="home-title">
+                Transform Rough Drafts into{' '}
+                <span className="home-title-accent">Polished Release Notes</span>
+              </h2>
+              <p className="home-subtitle">
+                Upload your Word document and let AI rewrite, validate, and format your release notes
+                against 30+ rubric rules — in seconds.
+              </p>
+            </div>
 
-              {processing ? (
-                <ZetaLoader />
-              ) : (
-                <ZetaUploadCard
-                  onFileSelect={(selectedFile) => {
-                    setFile(selectedFile);
-                    setError(null);
-                    simulateUploadProgress();
-                  }}
-                  isDragging={isDragging}
-                  setIsDragging={setIsDragging}
-                  processing={processing}
-                />
-              )}
-
-              {file && !processing && (
-                <div className="file-selected-card fade-in">
-                  <div className="file-info-row">
-                    <svg className="file-icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6"/>
-                    </svg>
-                    <div className="file-details">
-                      <p className="file-name">{file.name}</p>
-                      <p className="file-size">{(file.size / 1024).toFixed(1)} KB</p>
+            {/* Processing Loader or Upload Portal */}
+            {processing ? (
+              <ZetaLoader />
+            ) : (
+              <>
+                <div className="home-portal-wrap">
+                  <div
+                    className={`home-portal ${isDragging ? 'dragging' : ''}`}
+                    onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true); }}
+                    onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); }}
+                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                    onDrop={(e) => {
+                      e.preventDefault(); e.stopPropagation(); setIsDragging(false);
+                      const f = e.dataTransfer.files;
+                      if (f.length > 0 && f[0].name.endsWith('.docx')) {
+                        setFile(f[0]); setError(null); simulateUploadProgress();
+                      } else { setError('Please upload a .docx file'); }
+                    }}
+                  >
+                    <div className="home-portal-icon">
+                      {isDragging ? '\u{2B07}\u{FE0F}' : '\u{1F4C4}'}
                     </div>
-                    <button className="btn-remove" onClick={() => setFile(null)}>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                      </svg>
+                    <div className="home-portal-heading">
+                      {isDragging ? 'Drop your file here' : 'Upload Release Notes'}
+                    </div>
+                    <div className="home-portal-desc">
+                      {isDragging ? 'Release to upload' : 'Drag and drop your Word document, or browse to select'}
+                    </div>
+                    <label className="home-portal-browse">
+                      <input type="file" accept=".docx" style={{ display: 'none' }}
+                        onChange={(e) => { if (e.target.files[0]) { setFile(e.target.files[0]); setError(null); simulateUploadProgress(); } }}
+                      />
+                      Choose .docx File
+                    </label>
+                    <div className="home-portal-hint">Supports .docx files only</div>
+                  </div>
+                </div>
+
+                {/* Error */}
+                {error && (
+                  <div className="home-error">
+                    <span className="home-error-icon">{'\u26A0\uFE0F'}</span>
+                    <span>{error}</span>
+                  </div>
+                )}
+
+                {/* File Ready Card */}
+                {file && (
+                  <div className="home-file-card">
+                    <div className="home-file-row">
+                      <div className="home-file-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6"/>
+                        </svg>
+                      </div>
+                      <div className="home-file-meta">
+                        <div className="home-file-name">{file.name}</div>
+                        <div className="home-file-size">{(file.size / 1024).toFixed(1)} KB</div>
+                      </div>
+                      <button className="home-file-remove" onClick={() => { setFile(null); setUploadProgress(0); }}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                      </button>
+                    </div>
+
+                    {uploadProgress > 0 && uploadProgress < 100 && (
+                      <div className="home-progress-wrap">
+                        <div className="home-progress-track">
+                          <div className="home-progress-fill" style={{ width: `${uploadProgress}%` }}/>
+                        </div>
+                        <div className="home-progress-label">{Math.round(uploadProgress)}% uploaded</div>
+                      </div>
+                    )}
+
+                    <button className="home-process-btn" onClick={handleUpload} disabled={!file || processing}>
+                      Process Document
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                     </button>
                   </div>
+                )}
+              </>
+            )}
 
-                  {uploadProgress > 0 && uploadProgress < 100 && (
-                    <div className="progress-wrapper">
-                      <div className="progress-bar-modern">
-                        <div className="progress-fill-modern" style={{ width: `${uploadProgress}%` }}/>
-                      </div>
-                      <p className="progress-label">{Math.round(uploadProgress)}% uploaded</p>
-                    </div>
-                  )}
-
-                  <button
-                    className="gradient-button"
-                    onClick={handleUpload}
-                    disabled={!file || processing}
-                    style={{ maxWidth: '600px', padding: '20px 48px', fontSize: '20px', fontWeight: '800', whiteSpace: 'nowrap', margin: '0 auto', display: 'flex' }}
-                  >
-                    {processing ? (
-                      <>
-                        <span className="spinner"></span>
-                        <span className="gradient-text">Processing with AI...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="gradient-text">Process Document</span>
-                        <svg className="btn-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M5 12h14M12 5l7 7-7 7"/>
-                        </svg>
-                      </>
-                    )}
-                  </button>
+            {/* Feature Pillars */}
+            {!processing && (
+              <div className="home-features">
+                <div className="home-feature-pillar" style={{ '--pillar-color': '#8b5cf6' }}>
+                  <div className="home-pillar-icon">{'\u{1F916}'}</div>
+                  <div className="home-pillar-title">AI-Powered Rewriting</div>
+                  <div className="home-pillar-desc">Multi-LLM pipeline with Qubrid, Groq & Gemini fallback</div>
                 </div>
-              )}
-            </div>
-
-            {/* Feature Cards */}
-            <div className="feature-grid">
-              <div className="feature-card slide-in" style={{ animationDelay: '0.1s' }}>
-                <div className="feature-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/>
-                  </svg>
+                <div className="home-feature-pillar" style={{ '--pillar-color': '#06b6d4' }}>
+                  <div className="home-pillar-icon">{'\u{1F6E1}\u{FE0F}'}</div>
+                  <div className="home-pillar-title">30+ Rubric Rules</div>
+                  <div className="home-pillar-desc">Deterministic validation — no hallucination allowed</div>
                 </div>
-                <h3 className="feature-title">AI-Powered</h3>
-                <p className="feature-desc">Automatic conversion to compliant format</p>
+                <div className="home-feature-pillar" style={{ '--pillar-color': '#ec4899' }}>
+                  <div className="home-pillar-icon">{'\u{1F4CA}'}</div>
+                  <div className="home-pillar-title">Rich Validation Report</div>
+                  <div className="home-pillar-desc">Before/after, compliance matrix, geography insights</div>
+                </div>
               </div>
-
-              <div className="feature-card slide-in" style={{ animationDelay: '0.2s' }}>
-                <div className="feature-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                    <polyline points="14 2 14 8 20 8"/>
-                    <line x1="16" y1="13" x2="8" y2="13"/>
-                    <line x1="16" y1="17" x2="8" y2="17"/>
-                  </svg>
-                </div>
-                <h3 className="feature-title">Validation Report</h3>
-                <p className="feature-desc">Detailed compliance report with CSV export</p>
-              </div>
-            </div>
+            )}
           </div>
         )}
 
@@ -794,7 +447,7 @@ function App() {
                       </div>
                       <button
                         className="btn btn-sm btn-success"
-                        onClick={() => window.open(`${API_BASE_URL}/download-all`, '_blank')}
+                        onClick={downloadAll}
                       >
                         Download All
                       </button>
@@ -832,22 +485,7 @@ function App() {
                       </div>
                     ))}
                     
-                    {/* Validation Report CSV */}
-                    {csvFiles.slice(0, 1).map(file => (
-                      <div key={file.filename} className="download-card fade-in">
-                        <div className="download-icon-csv"></div>
-                        <div className="download-info">
-                          <span className="download-name">{file.filename}</span>
-                          <span className="download-type">Validation Report (CSV)</span>
-                        </div>
-                        <button
-                          className="btn btn-sm btn-success"
-                          onClick={() => downloadFile(file.filename)}
-                        >
-                          Download
-                        </button>
-                      </div>
-                    ))}
+                    {/* CSV option removed */}
                   </div>
                 </div>
 
@@ -878,287 +516,13 @@ function App() {
           </div>
         )}
 
-        {/* Validation Tab - Enhanced with Rich Visualizations */}
+        {/* Validation Tab — Data Observatory */}
         {activeTab === 'validation' && (
-          <div className="validation-section fade-in">
-            {validationData ? (
-              <>
-                <div className="validation-header">
-                  <h2 className="section-title">Data Validation Report</h2>
-                  <div className="validation-controls">
-                    <div className="viz-selector">
-                      <button
-                        className={`viz-tab ${selectedViz === 'heatmap' ? 'active' : ''}`}
-                        onClick={() => setSelectedViz('heatmap')}
-                      >
-                        <span>Heatmap</span>
-                      </button>
-                      <button
-                        className={`viz-tab ${selectedViz === 'geography' ? 'active' : ''}`}
-                        onClick={() => setSelectedViz('geography')}
-                      >
-                        <span>Geography</span>
-                      </button>
-                      <button
-                        className={`viz-tab ${selectedViz === 'radar' ? 'active' : ''}`}
-                        onClick={() => setSelectedViz('radar')}
-                      >
-                        <span>Radar</span>
-                      </button>
-                      <button
-                        className={`viz-tab ${selectedViz === 'before' ? 'active' : ''}`}
-                        onClick={() => setSelectedViz('before')}
-                      >
-                        <span>Before/After</span>
-                      </button>
-                    </div>
-                    <button
-                      className="download-csv-btn"
-                      onClick={downloadCSV}
-                      disabled={csvFiles.length === 0}
-                    >
-                      <span>Download CSV</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Summary Cards */}
-                <div className="validation-summary-grid">
-                  <div className="validation-summary-card">
-                    <div className="summary-value">{validationData.overall_compliance_score}%</div>
-                    <div className="summary-label">Overall Compliance</div>
-                    <div className="summary-bar">
-                      <div
-                        className="summary-bar-fill"
-                        style={{ width: `${validationData.overall_compliance_score}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="validation-summary-card">
-                    <div className="summary-value">{validationData.total_features_extracted}</div>
-                    <div className="summary-label">Features Extracted</div>
-                  </div>
-
-                  <div className="validation-summary-card">
-                    <div className="summary-value">{validationData.features_published}</div>
-                    <div className="summary-label">Features Published</div>
-                    <div className="summary-pie-mini">
-                      <svg viewBox="0 0 36 36" className="circular-chart">
-                        <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#ef4444" strokeWidth="4" strokeDasharray="100, 100" />
-                        <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#10b981" strokeWidth="4" strokeDasharray={`${(validationData.features_published / Math.max(1, validationData.total_features_extracted)) * 100}, 100`} />
-                      </svg>
-                    </div>
-                  </div>
-
-                  <div className="validation-summary-card">
-                    <div className="summary-value">{Object.keys(validationData.data_integrity_checks || {}).filter(k => validationData.data_integrity_checks[k]).length}/{Object.keys(validationData.data_integrity_checks || {}).length}</div>
-                    <div className="summary-label">Integrity Checks Passed</div>
-                  </div>
-                </div>
-
-                {/* Category Scores - NEW DASHBOARD */}
-                {validationData.category_scores && (
-                  <div className="category-scores-section slide-in">
-                    <h3 className="subsection-title">Category-wise Compliance</h3>
-                    <div className="category-bars-viz">
-                      {Object.entries(validationData.category_scores).map(([cat, score], i) => (
-                        <div key={i} className="category-bar-item">
-                          <div className="cat-bar-label">{cat}</div>
-                          <div className="cat-bar-container">
-                            <div
-                              className="cat-bar-fill"
-                              style={{ width: `${score}%` }}
-                            />
-                          </div>
-                          <div className="cat-bar-value">{score}%</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Rich Visualizations - NEW DASHBOARD STYLE */}
-                <div className="rich-visualizations-section slide-in" style={{ animationDelay: '0.3s' }}>
-                  <h3 className="subsection-title">Data Dashboard</h3>
-
-                  {/* Visualization Tab Selector */}
-                  <div className="viz-tabs">
-                    <button
-                      className={`viz-tab ${selectedViz === 'compliance' ? 'active' : ''}`}
-                      onClick={() => setSelectedViz('compliance')}
-                    >
-                      <span>Compliance</span>
-                    </button>
-                    <button
-                      className={`viz-tab ${selectedViz === 'geography' ? 'active' : ''}`}
-                      onClick={() => setSelectedViz('geography')}
-                    >
-                      <span>Geography</span>
-                    </button>
-                    <button
-                      className={`viz-tab ${selectedViz === 'violations' ? 'active' : ''}`}
-                      onClick={() => setSelectedViz('violations')}
-                    >
-                      <span>Violations</span>
-                    </button>
-                    <button
-                      className={`viz-tab ${selectedViz === 'features' ? 'active' : ''}`}
-                      onClick={() => setSelectedViz('features')}
-                    >
-                      <span>Features</span>
-                    </button>
-                    <button
-                      className={`viz-tab ${selectedViz === 'before' ? 'active' : ''}`}
-                      onClick={() => setSelectedViz('before')}
-                    >
-                      <span>Before/After</span>
-                    </button>
-                  </div>
-
-                  <div className="viz-tabs-content">
-                    {/* Compliance Dashboard */}
-                    {selectedViz === 'compliance' && (
-                      <div className="viz-panel fade-in">
-                        {validationData.visualization_data?.compliance_heatmap ? (
-                          <ComplianceDashboard data={validationData.visualization_data.compliance_heatmap} />
-                        ) : (
-                          <div className="no-data-message">
-                            <p>📊 Compliance dashboard will be available after processing</p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Geography Dashboard */}
-                    {selectedViz === 'geography' && (
-                      <div className="viz-panel fade-in">
-                        {validationData.visualization_data?.geography_distribution ? (
-                          <GeographyDashboard data={validationData.visualization_data.geography_distribution} />
-                        ) : (
-                          <div className="no-data-message">
-                            <p>🌍 Geography dashboard will be available after processing</p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Violations Dashboard */}
-                    {selectedViz === 'violations' && (
-                      <div className="viz-panel fade-in">
-                        {validationData.category_scores ? (
-                          <ViolationsDashboard data={validationData} />
-                        ) : (
-                          <div className="no-data-message">
-                            <p>⚠️ Violations data will be available after processing</p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Features Compliance */}
-                    {selectedViz === 'features' && (
-                      <div className="viz-panel fade-in">
-                        {validationData.feature_validations ? (
-                          <FeatureComplianceDashboard data={validationData} />
-                        ) : (
-                          <div className="no-data-message">
-                            <p>📋 Feature compliance will be available after processing</p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Before/After Dashboard */}
-                    {selectedViz === 'before' && (
-                      <div className="viz-panel fade-in">
-                        {validationData.before_after_comparison && validationData.before_after_comparison.comparisons?.length > 0 ? (
-                          <BeforeAfterDashboard data={validationData.before_after_comparison} />
-                        ) : (
-                          <div className="no-data-message">
-                            <p>📝 Before/After comparison will be available after processing</p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Additional Charts Grid */}
-                <div className="additional-charts-grid slide-in" style={{ animationDelay: '0.4s' }}>
-                  {/* Feature Distribution Pie */}
-                  {validationData.visualization_data?.feature_comparison_pie && (
-                    <div className="chart-card">
-                      <h4 className="chart-title">Feature Distribution</h4>
-                      <FeaturePie data={validationData.visualization_data.feature_comparison_pie} />
-                    </div>
-                  )}
-                  
-                  {/* Violations Chart */}
-                  {validationData.visualization_data?.rubric_violations_chart && (
-                    <div className="chart-card">
-                      <h4 className="chart-title">Violations by Category</h4>
-                      <ViolationsChart data={validationData.visualization_data.rubric_violations_chart} />
-                    </div>
-                  )}
-                  
-                  {/* Stacked Bar - Passed/Failed */}
-                  {validationData.visualization_data?.stacked_bar_data && (
-                    <div className="chart-card full-width">
-                      <h4 className="chart-title">Feature Compliance Breakdown</h4>
-                      <StackedBarChart data={validationData.visualization_data.stacked_bar_data} />
-                    </div>
-                  )}
-                </div>
-
-                {/* Detailed Validation Table (Toggle) */}
-                {showValidation && (
-                  <div className="detailed-validation-section slide-in" style={{ animationDelay: '0.4s' }}>
-                    <h3 className="subsection-title">Detailed Feature Validation</h3>
-                    <div className="validation-table-container">
-                      <table className="validation-table">
-                        <thead>
-                          <tr>
-                            <th>Feature</th>
-                            <th>Compliance</th>
-                            <th>Rules Passed</th>
-                            <th>Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {validationData.feature_validations && validationData.feature_validations.map((fv, idx) => (
-                            <tr key={idx} className="validation-row">
-                              <td className="feature-name">{fv.feature_name}</td>
-                              <td>
-                                <div className="compliance-cell">
-                                  <span style={{ color: getStatusColor(fv.compliance_score) }}>{fv.compliance_score}%</span>
-                                </div>
-                              </td>
-                              <td>{fv.passed_rules}/{fv.total_rules}</td>
-                              <td>
-                                <span className={`status-badge-small ${fv.is_valid ? 'status-valid' : 'status-invalid'}`}>
-                                  {fv.is_valid ? 'Valid' : 'Needs Review'}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="empty-state scale-in">
-                <div className="empty-icon-chart"></div>
-                <h3>No Validation Data</h3>
-                <p>Upload and process a document to see validation details</p>
-                <button className="btn btn-primary" onClick={() => setActiveTab('upload')}>
-                  Go to Upload
-                </button>
-              </div>
-            )}
-          </div>
+          <ValidationSection
+            validationData={validationData}
+            files={files}
+            onTabChange={setActiveTab}
+          />
         )}
 
         {/* Files Tab */}

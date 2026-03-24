@@ -11,6 +11,7 @@ import zipfile
 import io
 from pathlib import Path
 from typing import List, Dict, Any, Optional
+from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
@@ -19,6 +20,8 @@ from docx import Document
 from openai import AsyncOpenAI
 import google.generativeai as genai
 import uvicorn
+
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 print("=" * 60, file=sys.stderr)
 print("=== RELEASE NOTES PROCESSOR - DETERMINISTIC ===", file=sys.stderr)
@@ -451,52 +454,144 @@ def generate_consolidated_markdown(features: List[ProcessedFeature]) -> str:
     return md
 
 # ============================================================================
-# VALIDATION
+# VALIDATION (Enriched with per-category scores and before/after data)
 # ============================================================================
-def validate_feature(feature: ProcessedFeature) -> Dict:
-    """Validate feature against Rubric rules"""
-    rules_passed = 0
-    total_rules = 10
-    violations = []
-    
+def validate_feature(feature: ProcessedFeature, raw_feature: RawFeature = None) -> Dict:
+    """Validate feature against Rubric rules with detailed category breakdown"""
+    categories = {
+        "Title & Structure": {"passed": 0, "total": 3, "violations": []},
+        "Acronym Compliance": {"passed": 0, "total": 0, "violations": []},
+        "Content Quality": {"passed": 0, "total": 2, "violations": []},
+        "Formatting": {"passed": 0, "total": 2, "violations": []},
+    }
+
+    # --- Title & Structure ---
     if feature.title and feature.title[0].isupper():
-        rules_passed += 1
+        categories["Title & Structure"]["passed"] += 1
     else:
-        violations.append("Title should start with capital letter")
-    
-    content = feature.problem_statement + feature.enhancement + feature.impact
-    acronyms = ['UPI', 'API', 'SFTP', 'NPCI', 'ANV', 'POS']
-    for acronym in acronyms:
-        if acronym in content:
-            if f'**{acronym}**' in content:
-                rules_passed += 1
+        categories["Title & Structure"]["violations"].append("Title should start with capital letter")
+
+    title_words = [w for w in feature.title.split() if len(w) > 3]
+    if title_words and all(w[0].isupper() for w in title_words):
+        categories["Title & Structure"]["passed"] += 1
+    else:
+        categories["Title & Structure"]["violations"].append("Title should use Title Case")
+
+    if feature.description and feature.description.startswith("Introduced"):
+        categories["Title & Structure"]["passed"] += 1
+    else:
+        categories["Title & Structure"]["violations"].append("Description should start with 'Introduced'")
+
+    # --- Acronym Compliance ---
+    content = f"{feature.problem_statement} {feature.enhancement} {feature.impact}"
+    acronyms_checked = []
+    acronym_list = ['UPI', 'API', 'SFTP', 'NPCI', 'ANV', 'POS', 'IMPS', 'NEFT', 'RTGS',
+                    'BIN', 'EMV', 'OTP', 'KYC', 'AML', 'CMS', 'SDK', 'PDF', 'CSV']
+    for acr in acronym_list:
+        if re.search(r'\b' + acr + r'\b', content, re.IGNORECASE):
+            categories["Acronym Compliance"]["total"] += 1
+            if f'**{acr}**' in content:
+                categories["Acronym Compliance"]["passed"] += 1
+                acronyms_checked.append({"acronym": acr, "status": "bolded"})
             else:
-                violations.append(f"Acronym {acronym} not bolded")
-        else:
-            rules_passed += 1
-    
-    temporal_words = ['previously', 'currently', 'now', 'existing', 'current']
-    has_temporal = any(word in content.lower() for word in temporal_words)
-    if not has_temporal:
-        rules_passed += 1
+                categories["Acronym Compliance"]["violations"].append(f"Acronym {acr} not bolded")
+                acronyms_checked.append({"acronym": acr, "status": "missing"})
+
+    if categories["Acronym Compliance"]["total"] == 0:
+        categories["Acronym Compliance"]["total"] = 1
+        categories["Acronym Compliance"]["passed"] = 1
+
+    # --- Content Quality ---
+    temporal_words_found = []
+    for tw in ['previously', 'currently', 'now', 'existing', 'current', 'presently']:
+        if tw in content.lower():
+            temporal_words_found.append(tw)
+    if not temporal_words_found:
+        categories["Content Quality"]["passed"] += 1
     else:
-        violations.append("Contains temporal words")
-    
-    if feature.description and 'Introduced' in feature.description:
-        rules_passed += 1
+        categories["Content Quality"]["violations"].append(f"Contains temporal words: {', '.join(temporal_words_found)}")
+
+    passive_markers = ['was ', 'were ', 'been ', 'being ']
+    if not any(p in content.lower() for p in passive_markers):
+        categories["Content Quality"]["passed"] += 1
     else:
-        violations.append("Description should start with 'Introduced'")
-    
-    compliance_score = (rules_passed / total_rules) * 100
-    
-    return {
+        categories["Content Quality"]["violations"].append("Contains passive voice constructions")
+
+    # --- Formatting ---
+    bullet_lines = [l for l in feature.enhancement.split('\n') if l.strip().startswith('-')]
+    if not bullet_lines or all(not l.rstrip().endswith('.') for l in bullet_lines):
+        categories["Formatting"]["passed"] += 1
+    else:
+        categories["Formatting"]["violations"].append("Bullet points should not end with periods")
+
+    if len(bullet_lines) < 3 or 'following:' in feature.enhancement.lower():
+        categories["Formatting"]["passed"] += 1
+    else:
+        categories["Formatting"]["violations"].append("Enhancement with 3+ bullets needs a lead line")
+
+    # --- Aggregate ---
+    total_passed = sum(c["passed"] for c in categories.values())
+    total_rules = sum(c["total"] for c in categories.values())
+    compliance_score = (total_passed / total_rules) * 100 if total_rules > 0 else 100
+
+    cat_scores = {}
+    for name, data in categories.items():
+        cat_scores[name] = round((data["passed"] / data["total"]) * 100, 1) if data["total"] > 0 else 100.0
+
+    all_violations = []
+    for data in categories.values():
+        all_violations.extend(data["violations"])
+
+    result = {
         "feature_name": feature.title,
         "compliance_score": round(compliance_score, 2),
-        "rules_passed": rules_passed,
+        "rules_passed": total_passed,
         "total_rules": total_rules,
         "is_valid": compliance_score >= 80,
-        "violations": violations
+        "violations": all_violations,
+        "category_scores": cat_scores,
+        "acronyms_found": acronyms_checked,
+        "temporal_words_found": temporal_words_found,
     }
+
+    # Before/After comparison data
+    if raw_feature:
+        def wc(t): return len(t.split()) if t else 0
+        sections_modified = []
+        if raw_feature.feature_name.strip() != feature.title.strip():
+            sections_modified.append("Title")
+        if raw_feature.problem_statement.strip() != feature.problem_statement.strip():
+            sections_modified.append("Problem Statement")
+        if raw_feature.enhancement.strip() != feature.enhancement.strip():
+            sections_modified.append("Enhancement")
+        if raw_feature.impact.strip() != feature.impact.strip():
+            sections_modified.append("Impact")
+
+        raw_text = f"{raw_feature.problem_statement} {raw_feature.enhancement} {raw_feature.impact}"
+        result["before_after"] = {
+            "before": {
+                "title": raw_feature.feature_name,
+                "problem_statement": raw_feature.problem_statement,
+                "enhancement": raw_feature.enhancement,
+                "impact": raw_feature.impact,
+            },
+            "after": {
+                "title": feature.title,
+                "description": feature.description,
+                "problem_statement": feature.problem_statement,
+                "enhancement": feature.enhancement,
+                "impact": feature.impact,
+            },
+            "changes_summary": {
+                "words_before": wc(raw_text),
+                "words_after": wc(content),
+                "acronyms_bolded": len([a for a in acronyms_checked if a["status"] == "bolded"]),
+                "sections_modified": sections_modified,
+                "temporal_words_removed": temporal_words_found,
+            }
+        }
+
+    return result
 
 # ============================================================================
 # API ENDPOINTS
@@ -603,19 +698,21 @@ async def process_document(file: UploadFile = File(...)):
         
         print("\nProcessing features (Python enforces structure)...", file=sys.stderr)
         processed_features = []
+        raw_published = []
         feature_validations = []
-        
+
         for feature in publishable:
             print(f"\nProcessing: {feature.feature_name}", file=sys.stderr)
+            raw_published.append(feature)
             processed = await apply_complete_conversion(feature)
             processed_features.append(processed)
-            
-            validation = validate_feature(processed)
+
+            validation = validate_feature(processed, feature)
             feature_validations.append(validation)
-        
+
         print("\nGenerating markdown files...", file=sys.stderr)
         generated_files = []
-        
+
         for i, feature in enumerate(processed_features):
             md_content, filename = generate_single_feature_markdown(feature)
             md_path = OUTPUT_DIR / filename
@@ -623,46 +720,119 @@ async def process_document(file: UploadFile = File(...)):
                 f.write(md_content)
             generated_files.append(filename)
             print(f"  ✓ Generated: {filename}", file=sys.stderr)
-        
+
         consolidated_path = OUTPUT_DIR / "release_notes_consolidated.md"
         with consolidated_path.open("w") as f:
             f.write(generate_consolidated_markdown(processed_features))
         generated_files.append("release_notes_consolidated.md")
-        
+
         total_features = len(raw_features)
         published = len(processed_features)
         filtered = total_features - published
-        
+
         avg_compliance = sum(v["compliance_score"] for v in feature_validations) / len(feature_validations) if feature_validations else 0
-        
+
+        # Geography distribution with feature lists
         geography_dist = {}
+        geography_features = {}
         for feature in processed_features:
-            geo = feature.geography
+            geo = feature.geography or "All"
             geography_dist[geo] = geography_dist.get(geo, 0) + 1
-        
+            geography_features.setdefault(geo, []).append(feature.title)
+
+        # Aggregate category scores across all features
+        agg_cat = {}
+        for v in feature_validations:
+            for cat, score in v.get("category_scores", {}).items():
+                agg_cat.setdefault(cat, []).append(score)
+        category_scores = {cat: round(sum(s) / len(s), 1) for cat, s in agg_cat.items()}
+
+        # Data integrity checks
+        has_empty_titles = any(not f.title.strip() for f in processed_features)
+        has_empty_desc = any(not f.description.strip() for f in processed_features)
+        has_empty_problem = any(not f.problem_statement.strip() for f in processed_features)
+        has_empty_enhancement = any(not f.enhancement.strip() for f in processed_features)
+        valid_geos = {'All', 'India', 'US', 'Global'}
+        all_geos_valid = all(f.geography in valid_geos for f in processed_features)
+
+        data_integrity_checks = {
+            "geography_preserved": {"status": all_geos_valid, "label": "Geography Preserved"},
+            "no_empty_titles": {"status": not has_empty_titles, "label": "No Empty Titles"},
+            "no_empty_descriptions": {"status": not has_empty_desc, "label": "No Empty Descriptions"},
+            "no_empty_problems": {"status": not has_empty_problem, "label": "Problem Statements Present"},
+            "no_empty_enhancements": {"status": not has_empty_enhancement, "label": "Enhancements Present"},
+            "all_fields_present": {"status": not (has_empty_titles or has_empty_desc or has_empty_problem), "label": "All Required Fields Present"},
+        }
+
+        # Before/After comparisons from enriched validation data
+        comparisons = []
+        for v in feature_validations:
+            if "before_after" in v:
+                comparisons.append({
+                    "feature_name": v["feature_name"],
+                    **v["before_after"]
+                })
+
+        # Violations chart data
+        violation_cats = {}
+        for v in feature_validations:
+            for viol in v.get("violations", []):
+                cat = "Acronyms" if "Acronym" in viol else "Content" if "temporal" in viol.lower() or "passive" in viol.lower() else "Title" if "Title" in viol or "Description" in viol else "Formatting"
+                violation_cats[cat] = violation_cats.get(cat, 0) + 1
+        viol_colors = {"Title": "#ff4757", "Acronyms": "#ffa502", "Content": "#ff6b81", "Formatting": "#ee5a24"}
+
+        # Stacked bar data
+        stacked_bars = []
+        for v in feature_validations:
+            stacked_bars.append({
+                "feature": v["feature_name"][:35],
+                "passed": v["rules_passed"],
+                "failed": v["total_rules"] - v["rules_passed"],
+                "total": v["total_rules"],
+                "compliance": round(v["compliance_score"])
+            })
+
+        pub_pct = round((published / max(total_features, 1)) * 100)
+        filt_pct = 100 - pub_pct
+
         validation_report = {
             "total_features_extracted": total_features,
             "features_published": published,
             "features_filtered": filtered,
             "overall_compliance_score": round(avg_compliance, 2),
             "geography_distribution": geography_dist,
-            "category_scores": {"Formatting": 95, "Structure": 90, "Content": 85, "Style": 92},
-            "data_integrity_checks": {"all_fields_present": True, "no_empty_titles": True, "valid_geography": True},
+            "category_scores": category_scores,
+            "data_integrity_checks": data_integrity_checks,
             "feature_validations": feature_validations,
+            "before_after_comparison": {"comparisons": comparisons},
             "visualization_data": {
                 "compliance_heatmap": {
-                    "data": [{"feature": v["feature_name"][:30], "scores": {"Formatting": 95, "Structure": 90, "Content": 85}} for v in feature_validations],
-                    "categories": ["Formatting", "Structure", "Content"]
+                    "data": [{"feature": v["feature_name"][:35], "scores": v.get("category_scores", {})} for v in feature_validations],
+                    "categories": list(category_scores.keys())
                 },
-                "geography_distribution": {"counts": geography_dist},
+                "geography_distribution": {
+                    "counts": geography_dist,
+                    "features_by_geography": geography_features
+                },
                 "feature_comparison_pie": {
                     "segments": [
-                        {"label": "Published", "value": published, "color": "#10b981"},
-                        {"label": "Filtered", "value": filtered, "color": "#ef4444"}
-                    ]
+                        {"label": "Published", "value": published, "color": "#00e88f"},
+                        {"label": "Filtered", "value": filtered, "color": "#ff4757"}
+                    ],
+                    "percentages": {"Published": pub_pct, "Filtered": filt_pct}
+                },
+                "rubric_violations_chart": {
+                    "categories": list(violation_cats.keys()),
+                    "counts": list(violation_cats.values()),
+                    "colors": [viol_colors.get(c, "#ff6b81") for c in violation_cats.keys()],
+                    "total_violations": sum(violation_cats.values())
+                },
+                "stacked_bar_data": {
+                    "bars": stacked_bars,
+                    "colors": {"passed": "#00e88f", "failed": "#ff4757"}
                 }
             },
-            "rubric_violations": [f"[{v['feature_name']}] {v['violations'][0] if v.get('violations') else 'Minor issue'}" for v in feature_validations if v["compliance_score"] < 100][:5]
+            "rubric_violations": [f"[{v['feature_name']}] {v['violations'][0] if v.get('violations') else 'Minor issue'}" for v in feature_validations if v["compliance_score"] < 100][:10]
         }
         
         print(f"\n{'='*60}", file=sys.stderr)
