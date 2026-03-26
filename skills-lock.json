@@ -1,6 +1,11 @@
 {
   "version": 1,
   "skills": {
+    "explainer-visuals": {
+      "source": "petekp/agent-skills",
+      "sourceType": "github",
+      "computedHash": "8b62c226cf1dfa996b431ed533453f8cc9d92409d9db6293f15582fad8865cd3"
+    },
     "frontend-design": {
       "source": "anthropics/skills",
       "sourceType": "github",

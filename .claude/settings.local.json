@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(update-config)",
+      "Bash(wc -l /d/Tachyon/frontend/src/*.css)",
+      "Bash(find /d/Tachyon -maxdepth 2 -type f \\\\\\(-name *.env* -o -name *.config* -o -name *.ini -o -name README* -o -name *.md \\\\\\))",
+      "Bash(python -c \"import py_compile; py_compile.compile\\(''backend/main.py'', doraise=True\\); print\\(''Syntax OK''\\)\")",
+      "Bash(npx --yes react-scripts build)"
+    ]
+  }
+}
